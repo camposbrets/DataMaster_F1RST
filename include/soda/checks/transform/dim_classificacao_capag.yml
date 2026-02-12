@@ -1,0 +1,12 @@
+checks for dim_classificacao_capag:
+  - schema:
+      fail:
+        when required column missing: 
+          [classificacao_capag_id, classificacao_capag]
+        when wrong column type:
+          classificacao_capag_id: integer
+          classificacao_capag: string
+  - duplicate_count(classificacao_capag) = 0:
+      name: Toda classificacao_capag é única
+  - missing_count(classificacao_capag_id) = 0:
+      name: Toda classificacao_capag tem uma chave

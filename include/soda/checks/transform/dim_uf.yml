@@ -1,0 +1,12 @@
+checks for dim_uf:
+  - schema:
+      fail:
+        when required column missing: 
+          [uf_id, uf]
+        when wrong column type:
+          uf_id: integer
+          uf: string
+  - duplicate_count(uf_id) = 0:
+      name: Todo uf_id é único
+  - missing_count(uf_id) = 0:
+      name: Todo uf_id tem uma chave

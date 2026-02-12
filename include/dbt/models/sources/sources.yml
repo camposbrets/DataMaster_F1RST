@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: capag
+    database: projeto-data-master
+    tables:
+      - name: capag_brasil
+  
+  - name: cidades
+    database: projeto-data-master
+    tables:
+      - name: cidades_brasil

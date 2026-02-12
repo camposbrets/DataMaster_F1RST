@@ -1,0 +1,7 @@
+name: 'capag'
+
+profile: 'capag'
+
+models:
+  capag:
+    materialized: table

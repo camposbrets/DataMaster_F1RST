@@ -1,0 +1,13 @@
+checks for dim_instituicoes:
+  - schema:
+      fail:
+        when required column missing: 
+          [nome_instituicao, cod_ibge, uf]
+        when wrong column type:
+          nome_instituicao: string
+          cod_ibge: integer
+          uf: string
+  - duplicate_count(cod_ibge) = 0:
+      name: Todo cod_ibge é único
+  - missing_count(cod_ibge) = 0:
+      name: Todo cod_ibge tem uma chave

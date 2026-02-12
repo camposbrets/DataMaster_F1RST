@@ -1,0 +1,25 @@
+checks for fato_indicadores:
+  - schema:
+      fail:
+        when required column missing: 
+          [ano_base, populacao, indicador_1, nota_1, indicador_2, nota_2,indicador_3, nota_3, cod_ibge, uf_id, classificacao_capag_id]
+        when wrong column type:
+          ano_base: integer
+          populacao: float64
+          indicador_1: string
+          nota_1: string
+          indicador_2: string
+          nota_2: string
+          indicador_3: string
+          nota_3: string
+          cod_ibge: integer
+          uf_id: integer
+          classificacao_capag_id: integer
+  - missing_count(classificacao_capag_id) = 0:
+      name: Toda classificacao_capag_id tem uma chave
+  - failed rows:
+      name: Todo valor do campo populacao é positivo
+      fail query: |
+        SELECT *
+        FROM fato_indicadores
+        WHERE populacao < 0

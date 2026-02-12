@@ -1,0 +1,15 @@
+data_source capag:
+  type: bigquery
+  connection:
+    account_info_json_path: /usr/local/airflow/include/gcp/service_account.json
+    auth_scopes:
+    - https://www.googleapis.com/auth/bigquery
+    - https://www.googleapis.com/auth/cloud-platform
+    - https://www.googleapis.com/auth/drive
+    project_id: 'projeto-data-master'
+    dataset: capag
+
+soda_cloud:
+  host: cloud.us.soda.io
+  api_key_id: cf27cc6b-d323-4de9-a7cf-0b34546ac736
+  api_key_secret: 7ubYI6g1MyEGO_my5rW1a7KYdHZ59hPBEJ9ljHCS37LMLYEJ9JzpPQ
