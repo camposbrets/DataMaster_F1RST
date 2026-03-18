@@ -3,10 +3,37 @@ version: 2
 sources:
   - name: capag
     database: projeto-data-master
+    description: "Dados CAPAG - Capacidade de Pagamento dos Municipios (Tesouro Nacional)"
+    freshness:
+      warn_after: {count: 120, period: day}
+      error_after: {count: 180, period: day}
+    loaded_at_field: _PARTITIONTIME
     tables:
       - name: capag_brasil
-  
+        description: >
+          Dados brutos de CAPAG municipal do portal dados.gov.br.
+          Atualizacao: quadrimestral (3x ao ano pelo Tesouro Nacional).
+          Colunas: instituicao, cod_ibge, uf, populacao, indicadores 1-3, notas, classificacao, ICF, ano_base.
+
   - name: cidades
     database: projeto-data-master
+    description: "Cadastro de cidades brasileiras com codigo IBGE"
     tables:
       - name: cidades_brasil
+        description: >
+          Tabela de referencia de municipios brasileiros (IBGE).
+          Dados relativamente estaticos - atualizam apenas com criacao/extincao de municipios.
+
+  - name: pib
+    database: projeto-data-master
+    description: "PIB Municipal - Produto Interno Bruto dos Municipios (IBGE)"
+    freshness:
+      warn_after: {count: 365, period: day}
+      error_after: {count: 450, period: day}
+    loaded_at_field: _PARTITIONTIME
+    tables:
+      - name: pib_municipal
+        description: >
+          Dados de PIB municipal do IBGE - tabela SIDRA 5938.
+          Atualizacao: anual (divulgacao com defasagem de ~2 anos).
+          Colunas: ano, cod_ibge, nome_municipio, uf, VA por setor, impostos, PIB total.

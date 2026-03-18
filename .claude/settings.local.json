@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(curl -s \"https://apisidra.ibge.gov.br/desctabapi.aspx?c=5938\")",
+      "Bash(sed 's/.*>//')",
+      "Bash(curl -s \"https://apisidra.ibge.gov.br/desctabapi.aspx?c=1194\")",
+      "Bash(curl -s \"https://sidra.ibge.gov.br/pesquisa/pib-munic/tabelas\")",
+      "Bash(curl -s \"https://apisidra.ibge.gov.br/desctabapi.aspx?c=5939\")",
+      "WebFetch(domain:apisidra.ibge.gov.br)"
+    ]
+  }
+}

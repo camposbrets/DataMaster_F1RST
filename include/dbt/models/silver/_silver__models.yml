@@ -1,0 +1,101 @@
+version: 2
+
+models:
+  - name: slv_capag_municipios
+    description: >
+      Dados CAPAG municipais limpos, tipados e deduplicados.
+      Cada registro representa um municipio em um ano base.
+      Indicadores convertidos para float64, valores 'n.d.' tratados como NULL.
+    columns:
+      - name: capag_sk
+        description: "Chave surrogada: hash(cod_ibge, ano_base)"
+        tests:
+          - unique
+          - not_null
+      - name: cod_ibge
+        description: "Codigo IBGE do municipio (7 digitos)"
+        tests:
+          - not_null
+      - name: ano_base
+        description: "Ano base dos indicadores fiscais"
+        tests:
+          - not_null
+      - name: uf
+        description: "Sigla da UF (2 caracteres)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS',
+                       'MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC',
+                       'SE','SP','TO']
+              config:
+                severity: warn
+      - name: indicador_1
+        description: "Endividamento (DC/RCL) - quanto menor melhor"
+      - name: indicador_2
+        description: "Poupanca Corrente - quanto maior melhor"
+      - name: indicador_3
+        description: "Indice de Liquidez - acima de 1 eh adequado"
+      - name: classificacao_capag
+        description: "Classificacao CAPAG: A, B, C ou D"
+
+  - name: slv_cidades
+    description: "Cadastro de municipios brasileiros, deduplicado por cod_ibge"
+    columns:
+      - name: cod_ibge
+        tests:
+          - unique
+          - not_null
+      - name: nome_municipio
+        tests:
+          - not_null
+      - name: uf
+        tests:
+          - not_null
+
+  - name: slv_pib_municipal
+    description: >
+      PIB Municipal IBGE limpo e deduplicado.
+      Cada registro representa o PIB de um municipio em um ano.
+    columns:
+      - name: pib_sk
+        description: "Chave surrogada: hash(cod_ibge, ano)"
+        tests:
+          - unique
+          - not_null
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: ano
+        tests:
+          - not_null
+      - name: pib
+        description: "PIB total do municipio em R$ (milhares)"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+  - name: slv_dim_uf
+    description: "Dimensao de Unidades Federativas"
+    columns:
+      - name: uf_id
+        tests:
+          - unique
+          - not_null
+      - name: uf
+        tests:
+          - unique
+          - not_null
+
+  - name: slv_dim_classificacao_capag
+    description: "Dimensao de classificacoes CAPAG com descricao"
+    columns:
+      - name: classificacao_capag_id
+        tests:
+          - unique
+          - not_null
+      - name: classificacao_capag
+        tests:
+          - unique
+          - not_null
