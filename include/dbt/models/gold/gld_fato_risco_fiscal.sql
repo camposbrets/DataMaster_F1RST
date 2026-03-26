@@ -47,11 +47,7 @@ base as (
         inst.nome_municipio,
         u.uf,
         p.pib,
-        p.taxa_crescimento_pib,
-        p.va_agropecuaria,
-        p.va_industria,
-        p.va_servicos,
-        p.va_administracao_publica
+        p.taxa_crescimento_pib
     from capag c
     left join pib p on c.cod_ibge = p.cod_ibge and c.ano_base = p.ano
     left join dim_inst inst on c.cod_ibge = inst.cod_ibge
@@ -63,46 +59,52 @@ scored as (
     select
         *,
 
-        -- Score CAPAG (0-40 pts)
+        -- Quando PIB nao existe, CAPAG assume peso total
+        pib is not null as tem_pib,
+
+        -- Score CAPAG (0-70 pts) — NULL quando classificacao ausente
         case classificacao_capag
-            when 'A' then 40
-            when 'B' then 25
-            when 'C' then 10
+            when 'A' then 70
+            when 'B' then 50
+            when 'C' then 25
             when 'D' then 0
-            else 0
-        end as score_capag,
-
-        -- Score Endividamento - indicador_1 (0-20 pts): menor = melhor
-        case
-            when indicador_1 is null then 0
-            when indicador_1 < 0.5 then 20
-            when indicador_1 < 1.0 then 15
-            when indicador_1 < 1.5 then 10
-            when indicador_1 < 2.0 then 5
-            else 0
-        end as score_endividamento,
-
-        -- Score Poupanca Corrente - indicador_2 (0-20 pts): maior = melhor
-        case
-            when indicador_2 is null then 0
-            when indicador_2 >= 0.95 then 20
-            when indicador_2 >= 0.90 then 15
-            when indicador_2 >= 0.85 then 10
-            when indicador_2 >= 0.80 then 5
-            else 0
-        end as score_poupanca,
+            else null
+        end as score_capag_base,
 
         -- Score Crescimento PIB (0-10 pts)
+        -- NULL quando PIB nao e
         case
+            when pib is null then null
             when taxa_crescimento_pib is null then 0
-            when taxa_crescimento_pib >= 10 then 10
-            when taxa_crescimento_pib >= 5 then 8
-            when taxa_crescimento_pib >= 2 then 6
-            when taxa_crescimento_pib >= 0 then 4
-            else 2
+            when taxa_crescimento_pib >= 10 then 30
+            when taxa_crescimento_pib >= 5 then 24
+            when taxa_crescimento_pib >= 2 then 18
+            when taxa_crescimento_pib >= 0 then 12
+            else 6
         end as score_crescimento_pib
 
     from base
+),
+
+-- Score final: sem PIB -> CAPAG assume 100%; sem CAPAG -> PIB assume 100%; sem ambos -> NULL
+score_final as(
+    select
+        *,
+        case
+            when score_capag_base is not null and tem_pib then score_capag_base
+            when score_capag_base is not null then cast(round(score_capag_base * 100.0 / 70) as int64)
+            else null
+        end as score_capag,
+        case
+            when score_capag_base is not null and tem_pib
+                then score_capag_base + score_crescimento_pib
+            when score_capag_base is not null
+                then cast(round(score_capag_base * 100.0 / 70) as int64)
+            when tem_pib
+                then cast(round(score_crescimento_pib * 100.0 / 30) as int64)
+            else null
+        end as score_risco_fiscal
+    from scored
 )
 
 select
@@ -125,25 +127,18 @@ select
     descricao_classificacao,
     pib,
     taxa_crescimento_pib,
-    va_agropecuaria,
-    va_industria,
-    va_servicos,
-    va_administracao_publica,
+    tem_pib,
     score_capag,
-    score_endividamento,
-    score_poupanca,
     score_crescimento_pib,
-    (score_capag + score_endividamento + score_poupanca
-     + score_crescimento_pib) as score_risco_fiscal,
+    score_risco_fiscal,
     case
-        when (score_capag + score_endividamento + score_poupanca
-              + score_crescimento_pib) >= 72
+        when score_risco_fiscal is null
+            then 'INDETERMINADO'
+        when score_risco_fiscal >= 72
             then 'BAIXO'
-        when (score_capag + score_endividamento + score_poupanca
-              + score_crescimento_pib) >= 54
+        when score_risco_fiscal >= 54
             then 'MODERADO'
-        when (score_capag + score_endividamento + score_poupanca
-              + score_crescimento_pib) >= 36
+        when score_risco_fiscal >= 36
             then 'ELEVADO'
         else 'CRITICO'
     end as classificacao_risco,
@@ -153,4 +148,4 @@ select
         when populacao < 500000 then 'Grande (100k-500k)'
         else 'Metropole (> 500k)'
     end as faixa_populacao
-from scored
+from score_final

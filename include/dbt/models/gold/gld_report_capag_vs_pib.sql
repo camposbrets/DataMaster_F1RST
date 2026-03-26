@@ -15,10 +15,6 @@ select
     indicador_2 as poupanca_corrente,
     indicador_3 as liquidez,
     populacao,
-    faixa_populacao,
-    va_agropecuaria,
-    va_industria,
-    va_servicos,
-    va_administracao_publica
+    faixa_populacao
 from {{ ref('gld_fato_risco_fiscal') }}
 where pib is not null

@@ -136,9 +136,8 @@ models:
               config:
                 severity: warn
       - name: score_risco_fiscal
-        description: "Score composto de 0 a 100 pontos (CAPAG 40% + endividamento 20% + poupanca 20% + PIB 10%)"
+        description: "Score composto de 0 a 100 pontos. NULL quando nao ha dados CAPAG nem PIB."
         tests:
-          - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
@@ -148,7 +147,7 @@ models:
         description: "BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36)"
         tests:
           - accepted_values:
-              values: ['BAIXO', 'MODERADO', 'ELEVADO', 'CRITICO']
+              values: ['BAIXO', 'MODERADO', 'ELEVADO', 'CRITICO', 'INDETERMINADO']
               config:
                 severity: warn
 
@@ -173,11 +172,5 @@ models:
   - name: gld_report_capag_vs_pib
     description: "Report: correlacao entre indicadores CAPAG e PIB municipal"
 
-  - name: gld_report_distribuicao_geografica
-    description: "Report: distribuicao de risco por UF e classificacao"
-
   - name: gld_report_agregacao_estadual
     description: "Report: visao consolidada por estado com percentual de risco alto"
-
-  - name: gld_report_classificacao_uf
-    description: "Report: contagem de classificacoes CAPAG por UF e ano"

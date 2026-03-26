@@ -36,4 +36,4 @@ sources:
         description: >
           Dados de PIB municipal do IBGE - tabela SIDRA 5938.
           Atualizacao: anual (divulgacao com defasagem de ~2 anos).
-          Colunas: ano, cod_ibge, nome_municipio, uf, VA por setor, impostos, PIB total.
+          Colunas: ano, cod_ibge, nome_municipio, uf, PIB total.

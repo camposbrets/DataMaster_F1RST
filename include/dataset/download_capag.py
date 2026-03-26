@@ -13,6 +13,8 @@ import re
 import io
 import logging
 from pathlib import Path
+import os
+from include.dataset.gcs_utils import read_csv_years_from_gcs, get_default_bucket
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -246,15 +248,30 @@ def download_and_merge(output_path=None):
 
     output_path = Path(output_path)
 
-    # Verifica anos ja existentes no CSV
-    existing_years = set()
-    if output_path.exists():
+    # Verifica anos ja existentes no CSV — primeiro tenta o lake (GCS)
+    bucket = os.environ.get('GCS_BUCKET', get_default_bucket())
+    gcs_blob = 'raw/capag.csv'
+    existing_years = read_csv_years_from_gcs(bucket, gcs_blob, 'ANO_BASE')
+    if existing_years is None:
+        # fallback para arquivo local
+        existing_years = set()
+        if output_path.exists():
+            try:
+                existing_df = pd.read_csv(output_path, usecols=['ANO_BASE'], dtype=str)
+                existing_years = set(existing_df['ANO_BASE'].dropna().unique())
+                logger.info(f"CAPAG.csv existente com anos: {sorted(existing_years)}")
+            except Exception:
+                existing_years = set()
+    else:
+        logger.info(f"CAPAG.csv existente no GCS (gs://{bucket}/{gcs_blob}) com anos: {sorted(existing_years)}")
+
+    # Normaliza existing_years para int (GCS retorna int, local retorna str)
+    existing_years_int = set()
+    for y in existing_years:
         try:
-            existing_df = pd.read_csv(output_path, usecols=['ANO_BASE'], dtype=str)
-            existing_years = set(existing_df['ANO_BASE'].dropna().unique())
-            logger.info(f"CAPAG.csv existente com anos: {sorted(existing_years)}")
-        except Exception:
-            existing_years = set()
+            existing_years_int.add(int(y))
+        except (ValueError, TypeError):
+            continue
 
     logger.info("Buscando lista de recursos na API...")
     resources = fetch_resources()
@@ -266,7 +283,7 @@ def download_and_merge(output_path=None):
     # Filtra apenas anos novos (ano_base = year - 1)
     new_resources = [
         res for res in selected
-        if str(res['year'] - 1) not in existing_years
+        if (res['year'] - 1) not in existing_years_int
     ]
 
     if not new_resources:

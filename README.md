@@ -17,9 +17,9 @@
 
 ## 1. Objetivo do Projeto
 
-Este projeto implementa um **Sistema de Monitoramento de Risco Fiscal Municipal**, cruzando dados de **CAPAG** (Capacidade de Pagamento - Tesouro Nacional) com o **PIB Municipal** (IBGE) para avaliar a saúde fiscal dos municípios brasileiros.
+Este projeto implementa um **Sistema de Monitoramento de Risco Fiscal Municipal**, cruzando dados de **CAPAG** (Capacidade de Pagamento — Tesouro Nacional) com o **PIB Municipal** (IBGE) para avaliar a saúde fiscal dos municípios brasileiros.
 
-O sistema gera um **score de risco fiscal composto (0-100)** que combina indicadores de endividamento, poupança corrente, liquidez, PIB per capita e crescimento econômico, classificando cada município em: **BAIXO**, **MODERADO**, **ELEVADO** ou **CRÍTICO**.
+O sistema gera um **score de risco fiscal composto (0–100)** que combina a classificação CAPAG (até 70 pts — já consolida endividamento, poupança corrente e liquidez) com o crescimento do PIB municipal (até 30 pts), classificando cada município em: **BAIXO**, **MODERADO**, **ELEVADO**, **CRÍTICO** ou **INDETERMINADO** (quando não há dados suficientes).
 
 ### O que é CAPAG?
 
@@ -36,25 +36,25 @@ O processo CAPAG (Capacidade de Pagamento) é um sistema de avaliação da Secre
 
 ### O que é PIB Municipal?
 
-Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município, incluindo valor adicionado por setor econômico (agropecuária, indústria, serviços) e PIB per capita.
+Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município. O download é feito via API SIDRA, retornando o PIB a preços correntes (variável 37 — Mil Reais) para todos os municípios, com cobertura de 2015 a 2023.
 
 ---
 
 ## 2. Arquitetura de Solução
 
 ```
-┌─────────────────┐   ┌─────────────────┐
-│  dados.gov.br   │   │  IBGE / SIDRA   │
-│  (CAPAG XLSX)   │   │  (PIB Municipal)│
-└────────┬────────┘   └────────┬────────┘
-         │ download              │ download
-         ▼                       ▼
-┌─────────────────────────────────────────┐
-│            Google Cloud Storage          │
-│         (raw/capag.csv, raw/pib.csv)     │
-└────────────────┬────────────────────────┘
-                 │ load
-                 ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│  dados.gov.br   │   │  IBGE / SIDRA   │   │ IBGE Localidades│
+│  (CAPAG XLSX)   │   │  (PIB Municipal)│   │   (Municípios)  │
+└────────┬────────┘   └────────┬────────┘   └────────┬────────┘
+         │ download              │ download            │ download
+         ▼                       ▼                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Google Cloud Storage                       │
+│     (raw/capag.csv, raw/pib_municipal.csv, raw/cidades.csv)  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ load
+                           ▼
 ┌─────────────────────────────────────────┐
 │              BigQuery                    │
 │                                          │
@@ -76,17 +76,17 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 ### Orquestração (Airflow)
 
 ```
-[download_capag, download_pib]  (paralelo, retries=2, timeout=30min)
+[download_capag, download_pib, download_cidades]  (paralelo, retries=2, timeout=30min)
     → [upload GCS: capag, cidades, pib]  (paralelo)
-    → [criar datasets BigQuery]
+    → [criar datasets BigQuery: capag, cidades, pib, bronze, silver, gold]
     → [GCS → BigQuery raw tables]
-    → Bronze (dbt views)
-    → dbt test bronze
-    → Silver (dbt tables - limpeza, dedup, particionamento)
+    → Bronze (dbt views — DbtTaskGroup)
+    → dbt test bronze (external_python no dbt_venv)
+    → Silver (dbt tables — DbtTaskGroup)
     → dbt test silver
-    → Gold (dbt tables - fatos, dimensões, reports)
+    → Gold (dbt tables — DbtTaskGroup)
     → dbt test gold
-    → Geração de Insights Automáticos
+    → Geração de Insights Automáticos (salva em gold.insights_risco_fiscal)
 ```
 
 **Resiliência do pipeline:**
@@ -96,15 +96,19 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 - `dagrun_timeout=4h`: timeout total do pipeline
 - `on_failure_callback`: log estruturado de falhas (extensível para Slack/email)
 
+**Download incremental:**
+- Antes de baixar, os scripts verificam quais anos já existem no GCS (via `gcs_utils.py`) ou no CSV local
+- Apenas anos novos são baixados e concatenados ao CSV existente, evitando reprocessamento desnecessário
+
 ---
 
 ## 3. Fontes de Dados
 
 | Fonte | Origem | Frequência | Download | Freshness (dbt) |
 | --- | --- | --- | --- | --- |
-| CAPAG | dados.gov.br (Tesouro Nacional) | Quadrimestral | Automático via API | warn: 120d, error: 180d |
-| Cidades | IBGE | Estático | Manual (cidades.csv) | - (dados estáticos) |
-| PIB Municipal | IBGE SIDRA (tabela 5938) | Anual | Automático via API sidrapy | warn: 365d, error: 450d |
+| CAPAG | dados.gov.br (Tesouro Nacional) | Quadrimestral | Automático via API (XLSX → CSV) | warn: 120d, error: 180d |
+| Cidades | IBGE API Localidades | Relativamente estático | Automático via API | — |
+| PIB Municipal | IBGE SIDRA (tabela 5938) | Anual | Automático via API SIDRA (requests) | warn: 365d, error: 450d |
 
 ### Estrutura do CAPAG (13 colunas)
 
@@ -121,24 +125,30 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 | ICF | Ranking da Qualidade da Informação Contábil e Fiscal no Siconfi (a partir de 2024, nulo para anos anteriores) |
 | ANO_BASE | Ano base dos dados |
 
-### Estrutura do PIB Municipal
+### Estrutura do PIB Municipal (5 colunas)
 
 | Coluna | Descrição |
 | --- | --- |
 | ano | Ano de referência |
 | cod_ibge | Código IBGE do município |
-| pib | PIB total (R$ x 1000) |
-| va_agropecuaria | Valor adicionado agropecuária |
-| va_industria | Valor adicionado indústria |
-| va_servicos | Valor adicionado serviços |
-| va_administracao_publica | Valor adicionado adm. pública |
-| impostos | Impostos líquidos |
+| nome_municipio | Nome do município |
+| uf | Sigla da UF |
+| pib | PIB total a preços correntes (R$ x 1000) |
+
+### Estrutura de Cidades (4 colunas)
+
+| Coluna | Descrição |
+| --- | --- |
+| Id | Sequencial |
+| Codigo | Código IBGE do município |
+| Nome | Nome do município |
+| UF | Sigla da UF |
 
 ---
 
 ## 4. Arquitetura Medalhão (Bronze / Silver / Gold)
 
-### Bronze (dataset: `bronze`)
+### Bronze (dataset: `bronze`) — 3 views
 Views que espelham 1:1 os dados brutos do BigQuery. Sem transformação.
 
 | Modelo | Source |
@@ -147,65 +157,73 @@ Views que espelham 1:1 os dados brutos do BigQuery. Sem transformação.
 | `brz_cidades_brasil` | cidades.cidades_brasil |
 | `brz_pib_municipal` | pib.pib_municipal |
 
-### Silver (dataset: `silver`)
-Dados limpos, tipados, deduplicados e validados. **Particionados por ano.**
+### Silver (dataset: `silver`) — 5 tabelas
+Dados limpos, tipados, deduplicados e validados. Particionados por ano quando aplicável.
 
 | Modelo | Descrição | Partição |
 | --- | --- | --- |
-| `slv_capag_municipios` | CAPAG limpo: SAFE_CAST, dedup por cod_ibge+ano_base, tratar n.d. | ano_base |
-| `slv_cidades` | Municípios deduplicados por cod_ibge | - |
-| `slv_pib_municipal` | PIB limpo e deduplicado | ano |
-| `slv_dim_uf` | Dimensão UF (union de CAPAG + cidades) | - |
-| `slv_dim_classificacao_capag` | Dimensão classificação com descrição | - |
+| `slv_capag_municipios` | CAPAG limpo: SAFE_CAST, dedup por cod_ibge+ano_base, tratar `n.d.` como NULL, surrogate key | ano_base |
+| `slv_cidades` | Municípios deduplicados por cod_ibge (ROW_NUMBER) | — |
+| `slv_pib_municipal` | PIB limpo, deduplicado (mantém maior PIB em caso de duplicata), surrogate key | ano |
+| `slv_dim_uf` | Dimensão UF: union distinct de CAPAG + cidades, gera `uf_id` com ROW_NUMBER | — |
+| `slv_dim_classificacao_capag` | Dimensão classificação (A/B/C/D) com descrição por extenso, gera `classificacao_capag_id` | — |
 
-### Gold (dataset: `gold`)
-Modelos de negócio prontos para consumo.
+### Gold (dataset: `gold`) — 10 tabelas
+Modelos de negócio prontos para consumo analítico e dashboards.
 
-#### Dimensões
+#### Dimensões (3 tabelas)
 | Modelo | Descrição |
 | --- | --- |
-| `gld_dim_instituicoes` | Municípios com nome, cod_ibge, UF |
-| `gld_dim_uf` | Unidades Federativas |
-| `gld_dim_classificacao_capag` | Classificações CAPAG com descrição |
+| `gld_dim_instituicoes` | Municípios com nome, cod_ibge, UF — FULL OUTER JOIN entre cidades e CAPAG para não perder registros |
+| `gld_dim_uf` | Unidades Federativas (promove slv_dim_uf para Gold) |
+| `gld_dim_classificacao_capag` | Classificações CAPAG com descrição (promove slv_dim_classificacao_capag para Gold) |
 
-#### Fatos
+#### Fatos (3 tabelas)
 | Modelo | Descrição | Partição | Cluster |
 | --- | --- | --- | --- |
-| `gld_fato_indicadores_capag` | Indicadores CAPAG por município/ano | ano_base | uf_id, classificacao |
-| `gld_fato_pib_municipal` | PIB com taxa de crescimento YoY | ano | uf_id |
-| `gld_fato_risco_fiscal` | **MODELO PRINCIPAL**: cruza CAPAG × PIB, score 0-100 | ano_base | classificacao_risco, uf |
+| `gld_fato_indicadores_capag` | Indicadores CAPAG por município/ano com FKs para dimensões | ano_base (range 2015–2030) | uf_id, classificacao_capag_id |
+| `gld_fato_pib_municipal` | PIB com taxa de crescimento YoY via `LAG()` + `SAFE_DIVIDE` | ano (range 2002–2030) | uf_id |
+| `gld_fato_risco_fiscal` | **MODELO PRINCIPAL**: cruza CAPAG × PIB, score 0–100, classificação de risco, faixa populacional | ano_base (range 2015–2030) | classificacao_risco, uf |
 
-#### Reports (tabelas para Metabase)
-| Modelo | Dashboard |
+#### Reports (4 tabelas pré-calculadas para Metabase)
+| Modelo | Finalidade |
 | --- | --- |
-| `gld_report_risco_fiscal_municipal` | Painel principal de risco fiscal |
-| `gld_report_tendencia_anual` | Evolução YoY com tendência |
-| `gld_report_capag_vs_pib` | Correlação CAPAG × PIB |
-| `gld_report_distribuicao_geografica` | Distribuição de risco por UF |
-| `gld_report_agregacao_estadual` | Visão consolidada por estado |
-| `gld_report_classificacao_uf` | Classificações CAPAG por UF/ano |
+| `gld_report_risco_fiscal_municipal` | Visão detalhada por município: score, classificação, indicadores, PIB |
+| `gld_report_tendencia_anual` | Evolução YoY com self-join: variação de score e tendência (MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO) |
+| `gld_report_capag_vs_pib` | Correlação CAPAG × PIB — apenas municípios com PIB disponível |
+| `gld_report_agregacao_estadual` | Visão consolidada por estado: totais, médias, % risco alto, PIB do estado |
 
-#### Insights
+#### Insights (tabela gerada por Python)
 | Modelo | Descrição |
 | --- | --- |
-| `insights_risco_fiscal` | Narrativas automáticas geradas pelo agente de insights |
+| `insights_risco_fiscal` | Narrativas automáticas geradas pelo agente de insights (6 tipos) |
 
-### Score de Risco Fiscal (0-100 pontos)
+### Score de Risco Fiscal (0–100 pontos)
+
+O score combina dois componentes independentes. Quando apenas um componente está disponível, ele é reescalado para 0–100. Quando nenhum está disponível, o score é NULL e a classificação é INDETERMINADO.
 
 | Componente | Peso | Critério |
 | --- | --- | --- |
-| Classificação CAPAG | 40 pts | A=40, B=25, C=10, D=0 |
-| Endividamento (ind_1) | 20 pts | Menor DC/RCL = melhor |
-| Poupança Corrente (ind_2) | 20 pts | Maior taxa = melhor |
-| PIB per capita | 10 pts | Maior = melhor |
-| Crescimento PIB | 10 pts | Maior crescimento = melhor |
+| Classificação CAPAG | 0–70 pts | A=70, B=50, C=25, D=0 — já consolida endividamento, poupança corrente e liquidez |
+| Crescimento PIB | 0–30 pts | ≥10%=30, ≥5%=24, ≥2%=18, ≥0%=12, <0%=6, nulo/sem PIB=0 |
+
+**Comportamento adaptativo do score:**
+- **CAPAG + PIB disponíveis** → score = score_capag_base + score_crescimento_pib (0–100)
+- **Apenas CAPAG** → score reescalado: `round(score_capag_base × 100 / 70)` (0–100)
+- **Apenas PIB** → score reescalado: `round(score_crescimento_pib × 100 / 30)` (0–100)
+- **Nenhum** → score = NULL → classificação = INDETERMINADO
 
 | Classificação | Score |
 | --- | --- |
-| BAIXO | >= 80 |
-| MODERADO | >= 60 |
-| ELEVADO | >= 40 |
-| CRÍTICO | < 40 |
+| BAIXO | ≥ 72 |
+| MODERADO | ≥ 54 |
+| ELEVADO | ≥ 36 |
+| CRÍTICO | < 36 |
+| INDETERMINADO | NULL (sem dados) |
+
+**Campos adicionais no modelo:**
+- `faixa_populacao`: categoriza o porte do município — Pequeno (< 20k), Médio (20k–100k), Grande (100k–500k), Metrópole (> 500k)
+- `tem_pib`: flag booleana que indica se o município tem dados de PIB para o ano
 
 ---
 
@@ -213,38 +231,43 @@ Modelos de negócio prontos para consumo.
 
 ### DAG principal: `capag`
 
-**Arquivo:** `dags/capag.py`
+**Arquivo:** `dags/capag.py` (~400 linhas)
 
 **Tags:** `capag`, `pib`, `risco_fiscal`
 
 **Fluxo detalhado:**
 
-1. **Download automático** (paralelo)
-   - `download_capag_files()` → Baixa XLSX do dados.gov.br, consolida em CAPAG.csv
-   - `download_pib_files()` → Baixa PIB Municipal da API SIDRA/IBGE
+1. **Download automático** (3 tasks em paralelo, retries=2, timeout=30min cada)
+   - `download_capag_files()` → API dados.gov.br → XLSX → consolida em CAPAG.csv (incremental por ano)
+   - `download_pib_files()` → API SIDRA/IBGE tabela 5938 → PIB_MUNICIPAL.csv (incremental por ano)
+   - `download_cidades_file()` → API IBGE Localidades → cidades.csv
 
-2. **Upload para GCS** (paralelo)
+2. **Upload para GCS** (3 tasks em paralelo)
    - `upload_capag_to_gcs` → gs://bruno_dm/raw/capag.csv
    - `upload_cidades_to_gcs` → gs://bruno_dm/raw/cidades.csv
    - `upload_pib_to_gcs` → gs://bruno_dm/raw/pib_municipal.csv
 
-3. **Criação de datasets** no BigQuery: capag, cidades, pib, bronze, silver, gold
+3. **Criação de 6 datasets** no BigQuery: capag, cidades, pib, bronze, silver, gold
 
-4. **Carga raw** → tabelas capag_brasil, cidades_brasil, pib_municipal
+4. **Carga raw** (GCS → BigQuery, `if_exists='replace'`)
+   - capag_brasil, cidades_brasil, pib_municipal
 
-5. **Bronze** → DbtTaskGroup (models/bronze)
+5. **Bronze** → DbtTaskGroup (models/bronze — 3 views)
 
-6. **dbt test bronze** → Validação de campos obrigatórios e tabelas não-vazias
+6. **dbt test bronze** → via `@task.external_python` no dbt_venv
 
-7. **Silver** → DbtTaskGroup (models/silver)
+7. **Silver** → DbtTaskGroup (models/silver — 5 tabelas)
 
-8. **dbt test silver** → Validação de duplicatas, nulls, UF válida, PIB >= 0
+8. **dbt test silver** → via `@task.external_python` no dbt_venv
 
-9. **Gold** → DbtTaskGroup (models/gold)
+9. **Gold** → DbtTaskGroup (models/gold — 10 tabelas)
 
-10. **dbt test gold** → Validação de score 0-100, classificações válidas
+10. **dbt test gold** → via `@task.external_python` no dbt_venv
 
-11. **Insights automáticos** → Gera narrativas e salva em gold.insights_risco_fiscal
+11. **Insights automáticos** → `generate_all_insights()` → salva em gold.insights_risco_fiscal
+
+**Encadeamento:** `chain(bronze, dbt_test_bronze, silver, dbt_test_silver, gold, dbt_test_gold, generate_insights)`  
+Se qualquer teste falhar com `severity: error`, as etapas seguintes não executam.
 
 ---
 
@@ -257,54 +280,58 @@ A validação de qualidade dos dados é feita com **dbt tests nativos**, executa
 
 ### Testes por camada
 
-**Bronze** (dados brutos):
+**Bronze** (dados brutos — `_bronze__models.yml`):
 | Teste | Tipo | Severidade |
 | --- | --- | --- |
-| Tabelas não-vazias | Singular SQL | error |
-| cod_ibge not null | Generic | error |
+| Tabelas CAPAG e PIB não-vazias | Singular SQL | error |
+| cod_ibge not null (capag, pib) | Generic | error |
+| instituicao not null (capag) | Generic | error |
 | ano_base / ano not null | Generic | error |
+| codigo not null (cidades) | Generic | error |
 
-**Silver** (dados limpos):
+**Silver** (dados limpos — `_silver__models.yml`):
 | Teste | Tipo | Severidade |
 | --- | --- | --- |
-| Chaves surrogadas únicas e não-nulas | Generic | error |
-| cod_ibge, ano_base not null | Generic | error |
-| UF válida (27 estados) | Generic | warn |
-| PIB >= 0 | Generic (accepted_range) | warn |
+| Tabelas CAPAG e PIB não-vazias | Singular SQL | error |
+| Chaves surrogadas (capag_sk, pib_sk) únicas e não-nulas | Generic | error |
+| cod_ibge, ano_base, uf not null | Generic | error |
+| uf_id, classificacao_capag_id unique e not null (dims) | Generic | error |
+| UF válida (27 estados) | Generic (accepted_values) | warn |
+| PIB ≥ 0 | Generic (accepted_range) | warn |
 
-**Gold** (modelos de negócio):
+**Gold** (modelos de negócio — `_gold__models.yml`):
 | Teste | Tipo | Severidade |
 | --- | --- | --- |
 | Tabela de risco fiscal não-vazia | Singular SQL | error |
-| risco_fiscal_id único e não-nulo | Generic | error |
-| cod_ibge not null | Generic | error |
+| risco_fiscal_id, indicador_id, pib_id únicos e não-nulos | Generic | error |
+| cod_ibge not null (fatos) | Generic | error |
+| cod_ibge unique (dim_instituicoes) | Generic | error |
 | Score entre 0 e 100 | Generic (accepted_range) | warn |
-| Classificação de risco válida | Generic (accepted_values) | warn |
-| FK uf_id existe na dim_uf | Generic (relationships) | warn |
-| FK classificacao_capag_id existe na dim | Generic (relationships) | warn |
-| PIB >= 0 | Generic (accepted_range) | warn |
+| Classificação de risco válida (BAIXO/MODERADO/ELEVADO/CRITICO/INDETERMINADO) | Generic (accepted_values) | warn |
+| Classificação CAPAG válida (A/B/C/D) | Generic (accepted_values) | — |
+| FK uf_id existe na gld_dim_uf | Generic (relationships) | warn |
+| FK classificacao_capag_id existe na gld_dim_classificacao_capag | Generic (relationships) | warn |
+| PIB ≥ 0 (fato_pib_municipal) | Generic (accepted_range) | warn |
 | Tendência válida (MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO) | Generic (accepted_values) | warn |
 
-### Porque dbt tests?
+### Source Freshness
+
+Configurado em `sources.yml` para detecção automática de dados obsoletos:
+- **CAPAG**: warn após 120 dias, error após 180 dias (publicação quadrimestral)
+- **PIB**: warn após 365 dias, error após 450 dias (publicação anual com defasagem ~2 anos)
+- Executado via `dbt source freshness`
+
+### Por que dbt tests (e não SODA)?
 
 O projeto utilizava anteriormente o **SODA** para validação de qualidade. A migração para **dbt tests** foi motivada por:
 
-**Economia de custos:**
-- O SODA Cloud é um serviço pago (~US$ 300+/mês em planos profissionais), exigindo conta, API Keys e configuração de ambiente virtual separado (soda_venv)
-- Os dbt tests são **100% gratuitos**, nativos do dbt que já faz parte do stack
-
-**Simplicidade operacional:**
-- Eliminou-se a necessidade de um virtual environment separado no Docker (soda_venv), reduzindo o tamanho da imagem e o tempo de build
-- Os testes rodam no mesmo ambiente dbt já existente, sem dependências extras
-- Não é necessário configurar credenciais ou API Keys adicionais
-
-**Alternativas avaliadas e descartadas:**
-
-| Alternativa | Motivo da rejeição |
-| --- | --- |
-| **SODA** | Serviço pago, requer conta cloud, API keys, venv separado no Docker |
-| **Great Expectations** | Dependência Python pesada (~500MB), overhead de configuração (stores, datasources, checkpoints), curva de aprendizado alta |
-| **SQL checks no Airflow** | Checks manuais via SQLCheckOperator são menos organizados, sem framework de testes padronizado, difícil manutenção conforme o projeto cresce |
+| Critério | SODA | dbt tests |
+| --- | --- | --- |
+| Custo | Cloud pago (~US$ 300+/mês) | 100% gratuito |
+| Infraestrutura | venv separado no Docker | Mesmo ambiente dbt |
+| Configuração | Credenciais + API keys extras | Zero config extra |
+| Integração | Ferramenta externa ao pipeline | Nativo no dbt, roda entre camadas |
+| Imagem Docker | Mais pesada (soda_venv) | Mais leve |
 
 ---
 
@@ -312,49 +339,45 @@ O projeto utilizava anteriormente o **SODA** para validação de qualidade. A mi
 
 **Arquivo:** `include/insights/generate_insights.py`
 
-Gera 6 tipos de insights em linguagem natural e salva na tabela `gold.insights_risco_fiscal`:
+Gera **6 tipos de insights** em linguagem natural, conecta diretamente no BigQuery, e salva o resultado na tabela `gold.insights_risco_fiscal` (WRITE_TRUNCATE — recria a cada execução):
 
-| Tipo | Insight |
-| --- | --- |
-| `resumo_geral` | Panorama fiscal: total de municípios, score médio, distribuição por risco |
-| `alerta_risco` | Top 10 municípios em situação crítica |
-| `destaque_positivo` | Top 10 municípios com melhor saúde fiscal |
-| `analise_regional` | Estados com maior concentração de risco |
-| `tendencia` | Evolução YoY: melhorias vs pioras |
-| `correlacao` | Análise por porte do município vs risco fiscal |
+| Tipo | Prioridade | Insight |
+| --- | --- | --- |
+| `resumo_geral` | 1 | Panorama fiscal: total de municípios, score médio, distribuição por faixa de risco |
+| `alerta_risco` | 2 | Top 10 municípios em situação CRÍTICA (menor score) |
+| `destaque_positivo` | 3 | Top 10 municípios com melhor saúde fiscal (maior score, classificação BAIXO) |
+| `analise_regional` | 4 | Top 10 estados com maior % de municípios em risco alto (ELEVADO + CRÍTICO) |
+| `tendencia` | 5 | Evolução YoY: quantos municípios melhoraram vs pioraram |
+| `correlacao` | 6 | Análise de risco por faixa populacional: % em risco crítico por porte |
 
-**Visualização no Metabase:**
-
-```sql
-SELECT titulo, narrativa, metrica_chave
-FROM gold.insights_risco_fiscal
-ORDER BY prioridade
-```
+Cada insight contém: `titulo`, `narrativa`, `metrica_chave`, `valor_metrica`, `ano_base`, `gerado_em`.
 
 ---
 
 ## 8. Dashboards no Metabase
 
+O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e consome as tabelas do dataset `gold` no BigQuery.
+
 ### Dashboard 1: Painel de Risco Fiscal Municipal
 - **Fonte:** `gold.gld_report_risco_fiscal_municipal`
 - **Filtros:** UF, Ano, Classificação de Risco, Faixa Populacional
-- **Cards:** Distribuição por risco (pizza), Top 10 maior/menor risco, Score médio (gauge), Mapa por UF
+- **Cards:** Distribuição por risco (pizza/barras), Top 10 maior/menor risco, Score médio, Tabela detalhada com indicadores
 
 ### Dashboard 2: Tendências Anuais
 - **Fonte:** `gold.gld_report_tendencia_anual`
-- **Cards:** Evolução do score médio (linha), Melhorias vs Pioras (barras), Heatmap UF × Ano
+- **Cards:** Evolução do score médio por ano (linha), Melhorias vs Pioras por ano (barras empilhadas), Variação de score por município
 
 ### Dashboard 3: CAPAG vs PIB
 - **Fonte:** `gold.gld_report_capag_vs_pib`
-- **Cards:** Scatter PIB per capita × Score, Risco médio por faixa populacional, Composição econômica por risco
+- **Cards:** Scatter PIB × Score, Risco médio por faixa populacional, Endividamento vs PIB, Comparativo por classificação CAPAG
 
 ### Dashboard 4: Visão Estadual
 - **Fonte:** `gold.gld_report_agregacao_estadual`
-- **Cards:** Ranking de estados, % municípios em risco alto, PIB total vs Score médio
+- **Cards:** Ranking de estados por score médio, % municípios em risco alto por UF, PIB total do estado vs Score, Indicadores médios por estado
 
 ### Dashboard 5: Insights Automáticos
 - **Fonte:** `gold.insights_risco_fiscal`
-- **Cards:** Narrativas automáticas ordenadas por prioridade
+- **Cards:** Narrativas automáticas ordenadas por prioridade, métrica-chave de cada insight
 
 ---
 
@@ -363,7 +386,7 @@ ORDER BY prioridade
 ### Pré-requisitos
 - 16GB RAM
 - Docker Desktop
-- Astro CLI
+- Astro CLI (`astro version`)
 - Conta Google Cloud (com BigQuery e GCS habilitados)
 
 ### Passo 1: Iniciar o ambiente
@@ -388,11 +411,11 @@ Isso inicia Airflow (http://localhost:8080) e Metabase (http://localhost:3000).
 ### Passo 3: Ajustar Project ID
 
 Se o Project ID for diferente de `projeto-data-master`, alterar em:
-- `include/dbt/profiles.yml` (linha 8)
-- `include/dbt/models/sources/sources.yml` (database em cada source)
+- `include/dbt/profiles.yml` → campo `project`
+- `include/dbt/models/sources/sources.yml` → campo `database` em cada source
 
 Se o bucket for diferente de `bruno_dm`, alterar em:
-- `dags/capag.py` (variável `GCS_BUCKET` no topo do arquivo)
+- `dags/capag.py` → variável `GCS_BUCKET` no topo do arquivo
 
 ### Passo 4: Configurar Airflow
 
@@ -410,10 +433,13 @@ Se o bucket for diferente de `bruno_dm`, alterar em:
 3. Acompanhar a execução na view Graph:
 
 ```
-download_capag ──┐
-                 ├──→ uploads ──→ datasets ──→ raw loads
-download_pib ────┘
-                 ──→ Bronze ──→ dbt test ──→ Silver ──→ dbt test ──→ Gold ──→ dbt test ──→ Insights
+download_capag ───→ upload_capag ──┐
+                                   │
+download_cidades ─→ upload_cidades ├──→ datasets (6) ──→ raw loads (3)
+                                   │
+download_pib ─────→ upload_pib ────┘
+                            ↓
+Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 tables) → dbt test → Insights
 ```
 
 ### Passo 6: Configurar Metabase
@@ -427,49 +453,56 @@ download_pib ────┘
 
 ## 10. Stack Tecnológica
 
-| Tecnologia | Uso |
-| --- | --- |
-| **Docker** | Containerização do ambiente |
-| **Astro CLI** | Gerenciamento do Airflow |
-| **Apache Airflow** | Orquestração do pipeline |
-| **Google Cloud Storage** | Armazenamento dos arquivos CSV |
-| **BigQuery** | Data warehouse (datasets: bronze, silver, gold) |
-| **dbt** | Transformação dos dados (Arquitetura Medalhão) + validação de qualidade (dbt tests) |
-| **Metabase** | Dashboards interativos |
-| **Python** | Download automático (CAPAG + PIB), geração de insights |
-| **sidrapy** | Integração com API SIDRA/IBGE |
+| Tecnologia | Versão | Uso |
+| --- | --- | --- |
+| **Docker** | — | Containerização do ambiente |
+| **Astro CLI / Runtime** | 8.8.0 | Gerenciamento do Airflow |
+| **Apache Airflow** | 2.x (TaskFlow API) | Orquestração do pipeline |
+| **astronomer-cosmos** | 1.0.3 | Integração Airflow ↔ dbt (DbtTaskGroup) |
+| **Google Cloud Storage** | — | Armazenamento dos arquivos CSV (raw layer) |
+| **BigQuery** | — | Data warehouse (datasets: capag, cidades, pib, bronze, silver, gold) |
+| **dbt-bigquery** | 1.5.3 | Transformação (Arquitetura Medalhão) + testes de qualidade |
+| **dbt-utils** | 1.1.1 | Macros auxiliares (generate_surrogate_key, accepted_range) |
+| **Metabase** | 0.50.24 | Dashboards interativos |
+| **Python** | — | Download automático, geração de insights |
+| **openpyxl** | — | Leitura de XLSX (CAPAG) |
+| **requests** | — | Chamadas HTTP às APIs (dados.gov.br, SIDRA, IBGE) |
+| **google-cloud-storage** | — | Upload de CSVs e verificação incremental no GCS |
 
 ### Estrutura do Projeto
 
 ```
 DataMaster_F1RST/
 ├── dags/
-│   └── capag.py                           # DAG principal (orquestração)
+│   └── capag.py                           # DAG principal (~400 linhas)
 ├── include/
 │   ├── dataset/
 │   │   ├── CAPAG.csv                      # Dados CAPAG consolidados
 │   │   ├── cidades.csv                    # Cadastro de municípios
-│   │   ├── download_capag.py              # Download automático CAPAG
-│   │   └── download_pib.py                # Download automático PIB Municipal
+│   │   ├── PIB_MUNICIPAL.csv              # PIB Municipal (IBGE SIDRA)
+│   │   ├── download_capag.py              # Download automático CAPAG (incremental)
+│   │   ├── download_cidades.py            # Download automático municípios (API IBGE)
+│   │   ├── download_pib.py                # Download automático PIB Municipal (incremental)
+│   │   └── gcs_utils.py                   # Utils: verificação de anos no GCS
 │   ├── dbt/
-│   │   ├── dbt_project.yml                # Configuração medalhão
+│   │   ├── dbt_project.yml                # Config medalhão (schemas, tags, materialização)
 │   │   ├── profiles.yml                   # Conexão BigQuery
-│   │   ├── packages.yml                   # dbt_utils
-│   │   ├── cosmos_config.py               # Integração Airflow-dbt
+│   │   ├── packages.yml                   # dbt_utils 1.1.1
+│   │   ├── cosmos_config.py               # Integração Airflow-dbt (ProfileConfig, ProjectConfig)
 │   │   ├── macros/
-│   │   │   └── generate_schema_name.sql   # Schema customizado
+│   │   │   └── generate_schema_name.sql   # Schema customizado por camada
 │   │   ├── models/
-│   │   │   ├── sources/sources.yml        # Definição de fontes
-│   │   │   ├── bronze/                    # 3 views (dados brutos)
-│   │   │   ├── silver/                    # 5 tabelas (dados limpos)
-│   │   │   └── gold/                      # 12 tabelas (negócio)
-│   │   └── tests/                         # Testes singulares de qualidade
+│   │   │   ├── sources/sources.yml        # 3 fontes com freshness
+│   │   │   ├── bronze/                    # 3 views + _bronze__models.yml
+│   │   │   ├── silver/                    # 5 tabelas + _silver__models.yml
+│   │   │   └── gold/                      # 10 tabelas + _gold__models.yml
+│   │   └── tests/                         # 5 testes singulares
 │   ├── insights/
 │   │   └── generate_insights.py           # Agente de insights automáticos
 │   └── gcp/
 │       └── service_account.json           # Credenciais GCP
-├── Dockerfile                             # Astro Runtime + dbt venv
-├── docker-compose.override.yml            # Metabase local
+├── Dockerfile                             # Astro Runtime 8.8.0 + dbt_venv
+├── docker-compose.override.yml            # Metabase 0.50.24 (porta 3000)
 ├── requirements.txt                       # Dependências Python
 └── README.md                              # Este arquivo
 ```

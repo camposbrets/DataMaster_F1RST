@@ -4,3 +4,4 @@ protobuf==3.20.0
 openpyxl
 requests
 sidrapy
+google-cloud-storage

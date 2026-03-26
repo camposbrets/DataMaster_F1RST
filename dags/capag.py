@@ -118,6 +118,17 @@ def capag():
         download_pib(output_path=output_path)
         log.info(f"PIB Municipal baixado com sucesso em {output_path}")
 
+    @task(retries=2, retry_delay=timedelta(minutes=3), execution_timeout=timedelta(minutes=30))
+    def download_cidades_file():
+        """Baixa cadastro atualizado de municipios da API de Localidades do IBGE.
+        Garante que novos municipios sejam incorporados ao pipeline mesmo sem atualizacao manual do cadastro."""
+        from include.dataset.download_cidades import download_cidades
+        from pathlib import Path
+
+        output_path = Path(f'{BASE_PATH}/include/dataset/cidades.csv')
+        download_cidades(output_path=output_path)
+        log.info(f"Cadastro de municipios baixado com sucesso em {output_path}")    
+
     # =============================================
     # UPLOAD PARA GCS
     # =============================================
@@ -357,9 +368,11 @@ def capag():
     # Downloads em paralelo
     download_capag = download_capag_files()
     download_pib = download_pib_files()
+    download_cidades = download_cidades_file()
 
     # Upload depende dos downloads
-    download_capag >> [upload_capag_to_gcs, upload_cidades_to_gcs]
+    download_capag >> upload_capag_to_gcs
+    download_cidades >> upload_cidades_to_gcs
     download_pib >> upload_pib_to_gcs
 
     # Uploads -> Datasets -> Raw loads (cada um na sua cadeia)

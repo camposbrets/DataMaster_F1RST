@@ -1,4 +1,4 @@
-Id,Codigo,Nome,Uf
+Id,Codigo,Nome,UF
 1,1100015,Alta Floresta D'Oeste,RO
 2,1100023,Ariquemes,RO
 3,1100031,Cabixi,RO
@@ -196,7 +196,7 @@ Id,Codigo,Nome,Uf
 195,1502855,Curuá,PA
 196,1502905,Curuçá,PA
 197,1502939,Dom Eliseu,PA
-198,1502954,Eldorado dos Carajás,PA
+198,1502954,Eldorado do Carajás,PA
 199,1503002,Faro,PA
 200,1503044,Floresta do Araguaia,PA
 201,1503077,Garrafão do Norte,PA
@@ -258,7 +258,7 @@ Id,Codigo,Nome,Uf
 257,1506302,Salvaterra,PA
 258,1506351,Santa Bárbara do Pará,PA
 259,1506401,Santa Cruz do Arari,PA
-260,1506500,Santa Isabel do Pará,PA
+260,1506500,Santa Izabel do Pará,PA
 261,1506559,Santa Luzia do Pará,PA
 262,1506583,Santa Maria das Barreiras,PA
 263,1506609,Santa Maria do Pará,PA
@@ -363,7 +363,7 @@ Id,Codigo,Nome,Uf
 362,1707652,Figueirópolis,TO
 363,1707702,Filadélfia,TO
 364,1708205,Formoso do Araguaia,TO
-365,1708254,Fortaleza do Tabocão,TO
+365,1708254,Tabocão,TO
 366,1708304,Goianorte,TO
 367,1709005,Goiatins,TO
 368,1709302,Guaraí,TO
@@ -576,7 +576,7 @@ Id,Codigo,Nome,Uf
 575,2107258,Nova Colinas,MA
 576,2107308,Nova Iorque,MA
 577,2107357,Nova Olinda do Maranhão,MA
-578,2107407,Olho D'Água das Cunhãs,MA
+578,2107407,Olho d'Água das Cunhãs,MA
 579,2107456,Olinda Nova do Maranhão,MA
 580,2107506,Paço do Lumiar,MA
 581,2107605,Palmeirândia,MA
@@ -944,7 +944,7 @@ Id,Codigo,Nome,Uf
 943,2304236,Croatá,CE
 944,2304251,Cruz,CE
 945,2304269,Deputado Irapuan Pinheiro,CE
-946,2304277,Ererê,CE
+946,2304277,Ereré,CE
 947,2304285,Eusébio,CE
 948,2304301,Farias Brito,CE
 949,2304350,Forquilha,CE
@@ -976,7 +976,7 @@ Id,Codigo,Nome,Uf
 975,2306108,Irauçuba,CE
 976,2306207,Itaiçaba,CE
 977,2306256,Itaitinga,CE
-978,2306306,Itapagé,CE
+978,2306306,Itapajé,CE
 979,2306405,Itapipoca,CE
 980,2306504,Itapiúna,CE
 981,2306553,Itarema,CE
@@ -1086,7 +1086,7 @@ Id,Codigo,Nome,Uf
 1085,2401008,Apodi,RN
 1086,2401107,Areia Branca,RN
 1087,2401206,Arês,RN
-1088,2401305,Augusto Severo,RN
+1088,2401305,Campo Grande,RN
 1089,2401404,Baía Formosa,RN
 1090,2401453,Baraúna,RN
 1091,2401503,Barcelona,RN
@@ -1142,7 +1142,7 @@ Id,Codigo,Nome,Uf
 1141,2406007,José da Penha,RN
 1142,2406106,Jucurutu,RN
 1143,2406155,Jundiá,RN
-1144,2406205,Lagoa D'Anta,RN
+1144,2406205,Lagoa d'Anta,RN
 1145,2406304,Lagoa de Pedras,RN
 1146,2406403,Lagoa de Velhos,RN
 1147,2406502,Lagoa Nova,RN
@@ -1165,7 +1165,7 @@ Id,Codigo,Nome,Uf
 1164,2408102,Natal,RN
 1165,2408201,Nísia Floresta,RN
 1166,2408300,Nova Cruz,RN
-1167,2408409,Olho-D'Água do Borges,RN
+1167,2408409,Olho d'Água do Borges,RN
 1168,2408508,Ouro Branco,RN
 1169,2408607,Paraná,RN
 1170,2408706,Paraú,RN
@@ -1186,7 +1186,7 @@ Id,Codigo,Nome,Uf
 1185,2410108,Poço Branco,RN
 1186,2410207,Portalegre,RN
 1187,2410256,Porto do Mangue,RN
-1188,2410306,Presidente Juscelino,RN
+1188,2410306,Serra Caiada,RN
 1189,2410405,Pureza,RN
 1190,2410504,Rafael Fernandes,RN
 1191,2410603,Rafael Godeiro,RN
@@ -1349,7 +1349,7 @@ Id,Codigo,Nome,Uf
 1348,2508505,Livramento,PB
 1349,2508554,Logradouro,PB
 1350,2508604,Lucena,PB
-1351,2508703,Mãe D'Água,PB
+1351,2508703,Mãe d'Água,PB
 1352,2508802,Malta,PB
 1353,2508901,Mamanguape,PB
 1354,2509008,Manaíra,PB
@@ -1371,7 +1371,7 @@ Id,Codigo,Nome,Uf
 1370,2510105,Nova Floresta,PB
 1371,2510204,Nova Olinda,PB
 1372,2510303,Nova Palmeira,PB
-1373,2510402,Olho D'Água,PB
+1373,2510402,Olho d'Água,PB
 1374,2510501,Olivedos,PB
 1375,2510600,Ouro Velho,PB
 1376,2510659,Parari,PB
@@ -1396,7 +1396,7 @@ Id,Codigo,Nome,Uf
 1395,2512309,Princesa Isabel,PB
 1396,2512408,Puxinanã,PB
 1397,2512507,Queimadas,PB
-1398,2512606,Quixabá,PB
+1398,2512606,Quixaba,PB
 1399,2512705,Remígio,PB
 1400,2512721,Pedro Régis,PB
 1401,2512747,Riachão,PB
@@ -1539,7 +1539,7 @@ Id,Codigo,Nome,Uf
 1538,2606606,Ibimirim,PE
 1539,2606705,Ibirajuba,PE
 1540,2606804,Igarassu,PE
-1541,2606903,Iguaraci,PE
+1541,2606903,Iguaracy,PE
 1542,2607000,Inajá,PE
 1543,2607109,Ingazeira,PE
 1544,2607208,Ipojuca,PE
@@ -1620,7 +1620,7 @@ Id,Codigo,Nome,Uf
 1619,2613503,São José do Belmonte,PE
 1620,2613602,São José do Egito,PE
 1621,2613701,São Lourenço da Mata,PE
-1622,2613800,São Vicente Ferrer,PE
+1622,2613800,São Vicente Férrer,PE
 1623,2613909,Serra Talhada,PE
 1624,2614006,Serrita,PE
 1625,2614105,Sertânia,PE
@@ -1709,9 +1709,9 @@ Id,Codigo,Nome,Uf
 1708,2705408,Monteirópolis,AL
 1709,2705507,Murici,AL
 1710,2705606,Novo Lino,AL
-1711,2705705,Olho D'Água das Flores,AL
-1712,2705804,Olho D'Água do Casado,AL
-1713,2705903,Olho D'Água Grande,AL
+1711,2705705,Olho d'Água das Flores,AL
+1712,2705804,Olho d'Água do Casado,AL
+1713,2705903,Olho d'Água Grande,AL
 1714,2706000,Olivença,AL
 1715,2706109,Ouro Branco,AL
 1716,2706208,Palestina,AL
@@ -1745,13 +1745,13 @@ Id,Codigo,Nome,Uf
 1744,2708808,São Sebastião,AL
 1745,2708907,Satuba,AL
 1746,2708956,Senador Rui Palmeira,AL
-1747,2709004,Tanque D'Arca,AL
+1747,2709004,Tanque d'Arca,AL
 1748,2709103,Taquarana,AL
 1749,2709152,Teotônio Vilela,AL
 1750,2709202,Traipu,AL
 1751,2709301,União dos Palmares,AL
 1752,2709400,Viçosa,AL
-1753,2800100,Amparo de São Francisco,SE
+1753,2800100,Amparo do São Francisco,SE
 1754,2800209,Aquidabã,SE
 1755,2800308,Aracaju,SE
 1756,2800407,Arauá,SE
@@ -1774,13 +1774,13 @@ Id,Codigo,Nome,Uf
 1773,2802304,Frei Paulo,SE
 1774,2802403,Gararu,SE
 1775,2802502,General Maynard,SE
-1776,2802601,Gracho Cardoso,SE
+1776,2802601,Graccho Cardoso,SE
 1777,2802700,Ilha das Flores,SE
 1778,2802809,Indiaroba,SE
 1779,2802908,Itabaiana,SE
 1780,2803005,Itabaianinha,SE
 1781,2803104,Itabi,SE
-1782,2803203,Itaporanga D'Ajuda,SE
+1782,2803203,Itaporanga d'Ajuda,SE
 1783,2803302,Japaratuba,SE
 1784,2803401,Japoatã,SE
 1785,2803500,Lagarto,SE
@@ -1850,7 +1850,7 @@ Id,Codigo,Nome,Uf
 1849,2901908,Aporá,BA
 1850,2901957,Apuarema,BA
 1851,2902005,Aracatu,BA
-1852,2902054,Araças,BA
+1852,2902054,Araçás,BA
 1853,2902104,Araci,BA
 1854,2902203,Aramari,BA
 1855,2902252,Arataca,BA
@@ -1945,7 +1945,7 @@ Id,Codigo,Nome,Uf
 1944,2909802,Cruz das Almas,BA
 1945,2909901,Curaçá,BA
 1946,2910008,Dário Meira,BA
-1947,2910057,Dias D'Ávila,BA
+1947,2910057,Dias d'Ávila,BA
 1948,2910107,Dom Basílio,BA
 1949,2910206,Dom Macedo Costa,BA
 1950,2910305,Elísio Medrado,BA
@@ -2030,7 +2030,7 @@ Id,Codigo,Nome,Uf
 2029,2917102,Itororó,BA
 2030,2917201,Ituaçu,BA
 2031,2917300,Ituberá,BA
-2032,2917334,Iuiú,BA
+2032,2917334,Iuiu,BA
 2033,2917359,Jaborandi,BA
 2034,2917409,Jacaraci,BA
 2035,2917508,Jacobina,BA
@@ -2094,7 +2094,7 @@ Id,Codigo,Nome,Uf
 2093,2922052,Mulungu do Morro,BA
 2094,2922102,Mundo Novo,BA
 2095,2922201,Muniz Ferreira,BA
-2096,2922250,Muquém de São Francisco,BA
+2096,2922250,Muquém do São Francisco,BA
 2097,2922300,Muritiba,BA
 2098,2922409,Mutuípe,BA
 2099,2922508,Nazaré,BA
@@ -2173,7 +2173,7 @@ Id,Codigo,Nome,Uf
 2172,2928208,Santana,BA
 2173,2928307,Santanópolis,BA
 2174,2928406,Santa Rita de Cássia,BA
-2175,2928505,Santa Teresinha,BA
+2175,2928505,Santa Terezinha,BA
 2176,2928604,Santo Amaro,BA
 2177,2928703,Santo Antônio de Jesus,BA
 2178,2928802,Santo Estêvão,BA
@@ -2302,7 +2302,7 @@ Id,Codigo,Nome,Uf
 2301,3105202,Bandeira,MG
 2302,3105301,Bandeira do Sul,MG
 2303,3105400,Barão de Cocais,MG
-2304,3105509,Barão de Monte Alto,MG
+2304,3105509,Barão do Monte Alto,MG
 2305,3105608,Barbacena,MG
 2306,3105707,Barra Longa,MG
 2307,3105905,Barroso,MG
@@ -2498,7 +2498,7 @@ Id,Codigo,Nome,Uf
 2497,3122603,Dom Joaquim,MG
 2498,3122702,Dom Silvério,MG
 2499,3122801,Dom Viçoso,MG
-2500,3122900,Dona Eusébia,MG
+2500,3122900,Dona Euzébia,MG
 2501,3123007,Dores de Campos,MG
 2502,3123106,Dores de Guanhães,MG
 2503,3123205,Dores do Indaiá,MG
@@ -2772,7 +2772,7 @@ Id,Codigo,Nome,Uf
 2771,3145356,Novo Oriente de Minas,MG
 2772,3145372,Novorizonte,MG
 2773,3145406,Olaria,MG
-2774,3145455,Olhos-D'Água,MG
+2774,3145455,Olhos-d'Água,MG
 2775,3145505,Olímpio Noronha,MG
 2776,3145604,Oliveira,MG
 2777,3145703,Oliveira Fortes,MG
@@ -2800,7 +2800,7 @@ Id,Codigo,Nome,Uf
 2799,3147501,Passabém,MG
 2800,3147600,Passa Quatro,MG
 2801,3147709,Passa Tempo,MG
-2802,3147808,Passa-Vinte,MG
+2802,3147808,Passa Vinte,MG
 2803,3147907,Passos,MG
 2804,3147956,Patis,MG
 2805,3148004,Patos de Minas,MG
@@ -2833,7 +2833,7 @@ Id,Codigo,Nome,Uf
 2832,3150307,Piedade do Rio Grande,MG
 2833,3150406,Piedade dos Gerais,MG
 2834,3150505,Pimenta,MG
-2835,3150539,Pingo-D'Água,MG
+2835,3150539,Pingo-d'Água,MG
 2836,3150570,Pintópolis,MG
 2837,3150604,Piracema,MG
 2838,3150703,Pirajuba,MG
@@ -3007,7 +3007,7 @@ Id,Codigo,Nome,Uf
 3006,3164902,São Sebastião do Rio Verde,MG
 3007,3165008,São Tiago,MG
 3008,3165107,São Tomás de Aquino,MG
-3009,3165206,São Thomé das Letras,MG
+3009,3165206,São Tomé das Letras,MG
 3010,3165305,São Vicente de Minas,MG
 3011,3165404,Sapucaí-Mirim,MG
 3012,3165503,Sardoá,MG
@@ -3105,7 +3105,7 @@ Id,Codigo,Nome,Uf
 3104,3200409,Anchieta,ES
 3105,3200508,Apiacá,ES
 3106,3200607,Aracruz,ES
-3107,3200706,Atilio Vivacqua,ES
+3107,3200706,Atílio Vivácqua,ES
 3108,3200805,Baixo Guandu,ES
 3109,3200904,Barra de São Francisco,ES
 3110,3201001,Boa Esperança,ES
@@ -3294,7 +3294,7 @@ Id,Codigo,Nome,Uf
 3293,3502309,Anhembi,SP
 3294,3502408,Anhumas,SP
 3295,3502507,Aparecida,SP
-3296,3502606,Aparecida D'Oeste,SP
+3296,3502606,Aparecida d'Oeste,SP
 3297,3502705,Apiaí,SP
 3298,3502754,Araçariguama,SP
 3299,3502804,Araçatuba,SP
@@ -3340,7 +3340,7 @@ Id,Codigo,Nome,Uf
 3339,3506359,Bertioga,SP
 3340,3506409,Bilac,SP
 3341,3506508,Birigui,SP
-3342,3506607,Biritiba-Mirim,SP
+3342,3506607,Biritiba Mirim,SP
 3343,3506706,Boa Esperança do Sul,SP
 3344,3506805,Bocaina,SP
 3345,3506904,Bofete,SP
@@ -3439,7 +3439,7 @@ Id,Codigo,Nome,Uf
 3438,3515152,Engenheiro Coelho,SP
 3439,3515186,Espírito Santo do Pinhal,SP
 3440,3515194,Espírito Santo do Turvo,SP
-3441,3515202,Estrela D'Oeste,SP
+3441,3515202,Estrela d'Oeste,SP
 3442,3515301,Estrela do Norte,SP
 3443,3515350,Euclides da Cunha Paulista,SP
 3444,3515400,Fartura,SP
@@ -3450,7 +3450,7 @@ Id,Codigo,Nome,Uf
 3449,3515806,Flora Rica,SP
 3450,3515905,Floreal,SP
 3451,3516002,Flórida Paulista,SP
-3452,3516101,Florínia,SP
+3452,3516101,Florínea,SP
 3453,3516200,Franca,SP
 3454,3516309,Francisco Morato,SP
 3455,3516408,Franco da Rocha,SP
@@ -3470,7 +3470,7 @@ Id,Codigo,Nome,Uf
 3469,3517703,Guará,SP
 3470,3517802,Guaraçaí,SP
 3471,3517901,Guaraci,SP
-3472,3518008,Guarani D'Oeste,SP
+3472,3518008,Guarani d'Oeste,SP
 3473,3518107,Guarantã,SP
 3474,3518206,Guararapes,SP
 3475,3518305,Guararema,SP
@@ -3519,7 +3519,7 @@ Id,Codigo,Nome,Uf
 3518,3521903,Itajobi,SP
 3519,3522000,Itaju,SP
 3520,3522109,Itanhaém,SP
-3521,3522158,Itaóca,SP
+3521,3522158,Itaoca,SP
 3522,3522208,Itapecerica da Serra,SP
 3523,3522307,Itapetininga,SP
 3524,3522406,Itapeva,SP
@@ -3611,7 +3611,7 @@ Id,Codigo,Nome,Uf
 3610,3530508,Mococa,SP
 3611,3530607,Mogi das Cruzes,SP
 3612,3530706,Mogi Guaçu,SP
-3613,3530805,Moji Mirim,SP
+3613,3530805,Mogi Mirim,SP
 3614,3530904,Mombuca,SP
 3615,3531001,Monções,SP
 3616,3531100,Mongaguá,SP
@@ -3662,7 +3662,7 @@ Id,Codigo,Nome,Uf
 3661,3534906,Pacaembu,SP
 3662,3535002,Palestina,SP
 3663,3535101,Palmares Paulista,SP
-3664,3535200,Palmeira D'Oeste,SP
+3664,3535200,Palmeira d'Oeste,SP
 3665,3535309,Palmital,SP
 3666,3535408,Panorama,SP
 3667,3535507,Paraguaçu Paulista,SP
@@ -3779,9 +3779,9 @@ Id,Codigo,Nome,Uf
 3778,3545506,Sandovalina,SP
 3779,3545605,Santa Adélia,SP
 3780,3545704,Santa Albertina,SP
-3781,3545803,Santa Bárbara D'Oeste,SP
+3781,3545803,Santa Bárbara d'Oeste,SP
 3782,3546009,Santa Branca,SP
-3783,3546108,Santa Clara D'Oeste,SP
+3783,3546108,Santa Clara d'Oeste,SP
 3784,3546207,Santa Cruz da Conceição,SP
 3785,3546256,Santa Cruz da Esperança,SP
 3786,3546306,Santa Cruz das Palmeiras,SP
@@ -3795,7 +3795,7 @@ Id,Codigo,Nome,Uf
 3794,3547106,Santa Mercedes,SP
 3795,3547205,Santana da Ponte Pensa,SP
 3796,3547304,Santana de Parnaíba,SP
-3797,3547403,Santa Rita D'Oeste,SP
+3797,3547403,Santa Rita d'Oeste,SP
 3798,3547502,Santa Rita do Passa Quatro,SP
 3799,3547601,Santa Rosa de Viterbo,SP
 3800,3547650,Santa Salete,SP
@@ -3817,7 +3817,7 @@ Id,Codigo,Nome,Uf
 3816,3549102,São João da Boa Vista,SP
 3817,3549201,São João das Duas Pontes,SP
 3818,3549250,São João de Iracema,SP
-3819,3549300,São João do Pau D'Alho,SP
+3819,3549300,São João do Pau d'Alho,SP
 3820,3549409,São Joaquim da Barra,SP
 3821,3549508,São José da Bela Vista,SP
 3822,3549607,São José do Barreiro,SP
@@ -3825,7 +3825,7 @@ Id,Codigo,Nome,Uf
 3824,3549805,São José do Rio Preto,SP
 3825,3549904,São José dos Campos,SP
 3826,3549953,São Lourenço da Serra,SP
-3827,3550001,São Luís do Paraitinga,SP
+3827,3550001,São Luiz do Paraitinga,SP
 3828,3550100,São Manuel,SP
 3829,3550209,São Miguel Arcanjo,SP
 3830,3550308,São Paulo,SP
@@ -4069,7 +4069,7 @@ Id,Codigo,Nome,Uf
 4068,4110953,Itaipulândia,PR
 4069,4111001,Itambaracá,PR
 4070,4111100,Itambé,PR
-4071,4111209,Itapejara D'Oeste,PR
+4071,4111209,Itapejara d'Oeste,PR
 4072,4111258,Itaperuçu,PR
 4073,4111308,Itaúna do Sul,PR
 4074,4111407,Ivaí,PR
@@ -4173,7 +4173,7 @@ Id,Codigo,Nome,Uf
 4172,4118808,Peabiru,PR
 4173,4118857,Perobal,PR
 4174,4118907,Pérola,PR
-4175,4119004,Pérola D'Oeste,PR
+4175,4119004,Pérola d'Oeste,PR
 4176,4119103,Piên,PR
 4177,4119152,Pinhais,PR
 4178,4119202,Pinhalão,PR
@@ -4255,7 +4255,7 @@ Id,Codigo,Nome,Uf
 4254,4124905,São João do Caiuá,PR
 4255,4125001,São João do Ivaí,PR
 4256,4125100,São João do Triunfo,PR
-4257,4125209,São Jorge D'Oeste,PR
+4257,4125209,São Jorge d'Oeste,PR
 4258,4125308,São Jorge do Ivaí,PR
 4259,4125357,São Jorge do Patrocínio,PR
 4260,4125407,São José da Boa Vista,PR
@@ -4407,14 +4407,14 @@ Id,Codigo,Nome,Uf
 4406,4205803,Garuva,SC
 4407,4205902,Gaspar,SC
 4408,4206009,Governador Celso Ramos,SC
-4409,4206108,Grão Pará,SC
+4409,4206108,Grão-Pará,SC
 4410,4206207,Gravatal,SC
 4411,4206306,Guabiruba,SC
 4412,4206405,Guaraciaba,SC
 4413,4206504,Guaramirim,SC
 4414,4206603,Guarujá do Sul,SC
 4415,4206652,Guatambú,SC
-4416,4206702,Herval D'Oeste,SC
+4416,4206702,Herval d'Oeste,SC
 4417,4206751,Ibiam,SC
 4418,4206801,Ibicaré,SC
 4419,4206900,Ibirama,SC
@@ -4454,7 +4454,7 @@ Id,Codigo,Nome,Uf
 4453,4209409,Laguna,SC
 4454,4209458,Lajeado Grande,SC
 4455,4209508,Laurentino,SC
-4456,4209607,Lauro Muller,SC
+4456,4209607,Lauro Müller,SC
 4457,4209706,Lebon Régis,SC
 4458,4209805,Leoberto Leal,SC
 4459,4209854,Lindóia do Sul,SC
@@ -4550,7 +4550,7 @@ Id,Codigo,Nome,Uf
 4549,4215802,São Bento do Sul,SC
 4550,4215901,São Bonifácio,SC
 4551,4216008,São Carlos,SC
-4552,4216057,São Cristovão do Sul,SC
+4552,4216057,São Cristóvão do Sul,SC
 4553,4216107,São Domingos,SC
 4554,4216206,São Francisco do Sul,SC
 4555,4216255,São João do Oeste,SC
@@ -4946,7 +4946,7 @@ Id,Codigo,Nome,Uf
 4945,4315354,Quinze de Novembro,RS
 4946,4315404,Redentora,RS
 4947,4315453,Relvado,RS
-4948,4315503,Restinga Seca,RS
+4948,4315503,Restinga Sêca,RS
 4949,4315552,Rio dos Índios,RS
 4950,4315602,Rio Grande,RS
 4951,4315701,Rio Pardo,RS
@@ -5087,7 +5087,7 @@ Id,Codigo,Nome,Uf
 5086,4322608,Venâncio Aires,RS
 5087,4322707,Vera Cruz,RS
 5088,4322806,Veranópolis,RS
-5089,4322855,Vespasiano Correa,RS
+5089,4322855,Vespasiano Corrêa,RS
 5090,4322905,Viadutos,RS
 5091,4323002,Viamão,RS
 5092,4323101,Vicente Dutra,RS
@@ -5100,7 +5100,7 @@ Id,Codigo,Nome,Uf
 5099,4323606,Vista Alegre do Prata,RS
 5100,4323705,Vista Gaúcha,RS
 5101,4323754,Vitória das Missões,RS
-5102,4323770,Westfalia,RS
+5102,4323770,Westfália,RS
 5103,4323804,Xangri-lá,RS
 5104,5000203,Água Clara,MS
 5105,5000252,Alcinópolis,MS
@@ -5198,374 +5198,374 @@ Id,Codigo,Nome,Uf
 5197,5101605,Barão de Melgaço,MT
 5198,5101704,Barra do Bugres,MT
 5199,5101803,Barra do Garças,MT
-5200,5101852,Bom Jesus do Araguaia,MT
-5201,5101902,Brasnorte,MT
-5202,5102504,Cáceres,MT
-5203,5102603,Campinápolis,MT
-5204,5102637,Campo Novo do Parecis,MT
-5205,5102678,Campo Verde,MT
-5206,5102686,Campos de Júlio,MT
-5207,5102694,Canabrava do Norte,MT
-5208,5102702,Canarana,MT
-5209,5102793,Carlinda,MT
-5210,5102850,Castanheira,MT
-5211,5103007,Chapada dos Guimarães,MT
-5212,5103056,Cláudia,MT
-5213,5103106,Cocalinho,MT
-5214,5103205,Colíder,MT
-5215,5103254,Colniza,MT
-5216,5103304,Comodoro,MT
-5217,5103353,Confresa,MT
-5218,5103361,Conquista D'Oeste,MT
-5219,5103379,Cotriguaçu,MT
-5220,5103403,Cuiabá,MT
-5221,5103437,Curvelândia,MT
-5222,5103452,Denise,MT
-5223,5103502,Diamantino,MT
-5224,5103601,Dom Aquino,MT
-5225,5103700,Feliz Natal,MT
-5226,5103809,Figueirópolis D'Oeste,MT
-5227,5103858,Gaúcha do Norte,MT
-5228,5103908,General Carneiro,MT
-5229,5103957,Glória D'Oeste,MT
-5230,5104104,Guarantã do Norte,MT
-5231,5104203,Guiratinga,MT
-5232,5104500,Indiavaí,MT
-5233,5104526,Ipiranga do Norte,MT
-5234,5104542,Itanhangá,MT
-5235,5104559,Itaúba,MT
-5236,5104609,Itiquira,MT
-5237,5104807,Jaciara,MT
-5238,5104906,Jangada,MT
-5239,5105002,Jauru,MT
-5240,5105101,Juara,MT
-5241,5105150,Juína,MT
-5242,5105176,Juruena,MT
-5243,5105200,Juscimeira,MT
-5244,5105234,Lambari D'Oeste,MT
-5245,5105259,Lucas do Rio Verde,MT
-5246,5105309,Luciara,MT
-5247,5105507,Vila Bela da Santíssima Trindade,MT
-5248,5105580,Marcelândia,MT
-5249,5105606,Matupá,MT
-5250,5105622,Mirassol D'Oeste,MT
-5251,5105903,Nobres,MT
-5252,5106000,Nortelândia,MT
-5253,5106109,Nossa Senhora do Livramento,MT
-5254,5106158,Nova Bandeirantes,MT
-5255,5106174,Nova Nazaré,MT
-5256,5106182,Nova Lacerda,MT
-5257,5106190,Nova Santa Helena,MT
-5258,5106208,Nova Brasilândia,MT
-5259,5106216,Nova Canaã do Norte,MT
-5260,5106224,Nova Mutum,MT
-5261,5106232,Nova Olímpia,MT
-5262,5106240,Nova Ubiratã,MT
-5263,5106257,Nova Xavantina,MT
-5264,5106265,Novo Mundo,MT
-5265,5106273,Novo Horizonte do Norte,MT
-5266,5106281,Novo São Joaquim,MT
-5267,5106299,Paranaíta,MT
-5268,5106307,Paranatinga,MT
-5269,5106315,Novo Santo Antônio,MT
-5270,5106372,Pedra Preta,MT
-5271,5106422,Peixoto de Azevedo,MT
-5272,5106455,Planalto da Serra,MT
-5273,5106505,Poconé,MT
-5274,5106653,Pontal do Araguaia,MT
-5275,5106703,Ponte Branca,MT
-5276,5106752,Pontes e Lacerda,MT
-5277,5106778,Porto Alegre do Norte,MT
-5278,5106802,Porto dos Gaúchos,MT
-5279,5106828,Porto Esperidião,MT
-5280,5106851,Porto Estrela,MT
-5281,5107008,Poxoréo,MT
-5282,5107040,Primavera do Leste,MT
-5283,5107065,Querência,MT
-5284,5107107,São José dos Quatro Marcos,MT
-5285,5107156,Reserva do Cabaçal,MT
-5286,5107180,Ribeirão Cascalheira,MT
-5287,5107198,Ribeirãozinho,MT
-5288,5107206,Rio Branco,MT
-5289,5107248,Santa Carmem,MT
-5290,5107263,Santo Afonso,MT
-5291,5107297,São José do Povo,MT
-5292,5107305,São José do Rio Claro,MT
-5293,5107354,São José do Xingu,MT
-5294,5107404,São Pedro da Cipa,MT
-5295,5107578,Rondolândia,MT
-5296,5107602,Rondonópolis,MT
-5297,5107701,Rosário Oeste,MT
-5298,5107743,Santa Cruz do Xingu,MT
-5299,5107750,Salto do Céu,MT
-5300,5107768,Santa Rita do Trivelato,MT
-5301,5107776,Santa Terezinha,MT
-5302,5107792,Santo Antônio do Leste,MT
-5303,5107800,Santo Antônio do Leverger,MT
-5304,5107859,São Félix do Araguaia,MT
-5305,5107875,Sapezal,MT
-5306,5107883,Serra Nova Dourada,MT
-5307,5107909,Sinop,MT
-5308,5107925,Sorriso,MT
-5309,5107941,Tabaporã,MT
-5310,5107958,Tangará da Serra,MT
-5311,5108006,Tapurah,MT
-5312,5108055,Terra Nova do Norte,MT
-5313,5108105,Tesouro,MT
-5314,5108204,Torixoréu,MT
-5315,5108303,União do Sul,MT
-5316,5108352,Vale de São Domingos,MT
-5317,5108402,Várzea Grande,MT
-5318,5108501,Vera,MT
-5319,5108600,Vila Rica,MT
-5320,5108808,Nova Guarita,MT
-5321,5108857,Nova Marilândia,MT
-5322,5108907,Nova Maringá,MT
-5323,5108956,Nova Monte Verde,MT
-5324,5200050,Abadia de Goiás,GO
-5325,5200100,Abadiânia,GO
-5326,5200134,Acreúna,GO
-5327,5200159,Adelândia,GO
-5328,5200175,Água Fria de Goiás,GO
-5329,5200209,Água Limpa,GO
-5330,5200258,Águas Lindas de Goiás,GO
-5331,5200308,Alexânia,GO
-5332,5200506,Aloândia,GO
-5333,5200555,Alto Horizonte,GO
-5334,5200605,Alto Paraíso de Goiás,GO
-5335,5200803,Alvorada do Norte,GO
-5336,5200829,Amaralina,GO
-5337,5200852,Americano do Brasil,GO
-5338,5200902,Amorinópolis,GO
-5339,5201108,Anápolis,GO
-5340,5201207,Anhanguera,GO
-5341,5201306,Anicuns,GO
-5342,5201405,Aparecida de Goiânia,GO
-5343,5201454,Aparecida do Rio Doce,GO
-5344,5201504,Aporé,GO
-5345,5201603,Araçu,GO
-5346,5201702,Aragarças,GO
-5347,5201801,Aragoiânia,GO
-5348,5202155,Araguapaz,GO
-5349,5202353,Arenópolis,GO
-5350,5202502,Aruanã,GO
-5351,5202601,Aurilândia,GO
-5352,5202809,Avelinópolis,GO
-5353,5203104,Baliza,GO
-5354,5203203,Barro Alto,GO
-5355,5203302,Bela Vista de Goiás,GO
-5356,5203401,Bom Jardim de Goiás,GO
-5357,5203500,Bom Jesus de Goiás,GO
-5358,5203559,Bonfinópolis,GO
-5359,5203575,Bonópolis,GO
-5360,5203609,Brazabrantes,GO
-5361,5203807,Britânia,GO
-5362,5203906,Buriti Alegre,GO
-5363,5203939,Buriti de Goiás,GO
-5364,5203962,Buritinópolis,GO
-5365,5204003,Cabeceiras,GO
-5366,5204102,Cachoeira Alta,GO
-5367,5204201,Cachoeira de Goiás,GO
-5368,5204250,Cachoeira Dourada,GO
-5369,5204300,Caçu,GO
-5370,5204409,Caiapônia,GO
-5371,5204508,Caldas Novas,GO
-5372,5204557,Caldazinha,GO
-5373,5204607,Campestre de Goiás,GO
-5374,5204656,Campinaçu,GO
-5375,5204706,Campinorte,GO
-5376,5204805,Campo Alegre de Goiás,GO
-5377,5204854,Campo Limpo de Goiás,GO
-5378,5204904,Campos Belos,GO
-5379,5204953,Campos Verdes,GO
-5380,5205000,Carmo do Rio Verde,GO
-5381,5205059,Castelândia,GO
-5382,5205109,Catalão,GO
-5383,5205208,Caturaí,GO
-5384,5205307,Cavalcante,GO
-5385,5205406,Ceres,GO
-5386,5205455,Cezarina,GO
-5387,5205471,Chapadão do Céu,GO
-5388,5205497,Cidade Ocidental,GO
-5389,5205513,Cocalzinho de Goiás,GO
-5390,5205521,Colinas do Sul,GO
-5391,5205703,Córrego do Ouro,GO
-5392,5205802,Corumbá de Goiás,GO
-5393,5205901,Corumbaíba,GO
-5394,5206206,Cristalina,GO
-5395,5206305,Cristianópolis,GO
-5396,5206404,Crixás,GO
-5397,5206503,Cromínia,GO
-5398,5206602,Cumari,GO
-5399,5206701,Damianópolis,GO
-5400,5206800,Damolândia,GO
-5401,5206909,Davinópolis,GO
-5402,5207105,Diorama,GO
-5403,5207253,Doverlândia,GO
-5404,5207352,Edealina,GO
-5405,5207402,Edéia,GO
-5406,5207501,Estrela do Norte,GO
-5407,5207535,Faina,GO
-5408,5207600,Fazenda Nova,GO
-5409,5207808,Firminópolis,GO
-5410,5207907,Flores de Goiás,GO
-5411,5208004,Formosa,GO
-5412,5208103,Formoso,GO
-5413,5208152,Gameleira de Goiás,GO
-5414,5208301,Divinópolis de Goiás,GO
-5415,5208400,Goianápolis,GO
-5416,5208509,Goiandira,GO
-5417,5208608,Goianésia,GO
-5418,5208707,Goiânia,GO
-5419,5208806,Goianira,GO
-5420,5208905,Goiás,GO
-5421,5209101,Goiatuba,GO
-5422,5209150,Gouvelândia,GO
-5423,5209200,Guapó,GO
-5424,5209291,Guaraíta,GO
-5425,5209408,Guarani de Goiás,GO
-5426,5209457,Guarinos,GO
-5427,5209606,Heitoraí,GO
-5428,5209705,Hidrolândia,GO
-5429,5209804,Hidrolina,GO
-5430,5209903,Iaciara,GO
-5431,5209937,Inaciolândia,GO
-5432,5209952,Indiara,GO
-5433,5210000,Inhumas,GO
-5434,5210109,Ipameri,GO
-5435,5210158,Ipiranga de Goiás,GO
-5436,5210208,Iporá,GO
-5437,5210307,Israelândia,GO
-5438,5210406,Itaberaí,GO
-5439,5210562,Itaguari,GO
-5440,5210604,Itaguaru,GO
-5441,5210802,Itajá,GO
-5442,5210901,Itapaci,GO
-5443,5211008,Itapirapuã,GO
-5444,5211206,Itapuranga,GO
-5445,5211305,Itarumã,GO
-5446,5211404,Itauçu,GO
-5447,5211503,Itumbiara,GO
-5448,5211602,Ivolândia,GO
-5449,5211701,Jandaia,GO
-5450,5211800,Jaraguá,GO
-5451,5211909,Jataí,GO
-5452,5212006,Jaupaci,GO
-5453,5212055,Jesúpolis,GO
-5454,5212105,Joviânia,GO
-5455,5212204,Jussara,GO
-5456,5212253,Lagoa Santa,GO
-5457,5212303,Leopoldo de Bulhões,GO
-5458,5212501,Luziânia,GO
-5459,5212600,Mairipotaba,GO
-5460,5212709,Mambaí,GO
-5461,5212808,Mara Rosa,GO
-5462,5212907,Marzagão,GO
-5463,5212956,Matrinchã,GO
-5464,5213004,Maurilândia,GO
-5465,5213053,Mimoso de Goiás,GO
-5466,5213087,Minaçu,GO
-5467,5213103,Mineiros,GO
-5468,5213400,Moiporá,GO
-5469,5213509,Monte Alegre de Goiás,GO
-5470,5213707,Montes Claros de Goiás,GO
-5471,5213756,Montividiu,GO
-5472,5213772,Montividiu do Norte,GO
-5473,5213806,Morrinhos,GO
-5474,5213855,Morro Agudo de Goiás,GO
-5475,5213905,Mossâmedes,GO
-5476,5214002,Mozarlândia,GO
-5477,5214051,Mundo Novo,GO
-5478,5214101,Mutunópolis,GO
-5479,5214408,Nazário,GO
-5480,5214507,Nerópolis,GO
-5481,5214606,Niquelândia,GO
-5482,5214705,Nova América,GO
-5483,5214804,Nova Aurora,GO
-5484,5214838,Nova Crixás,GO
-5485,5214861,Nova Glória,GO
-5486,5214879,Nova Iguaçu de Goiás,GO
-5487,5214903,Nova Roma,GO
-5488,5215009,Nova Veneza,GO
-5489,5215207,Novo Brasil,GO
-5490,5215231,Novo Gama,GO
-5491,5215256,Novo Planalto,GO
-5492,5215306,Orizona,GO
-5493,5215405,Ouro Verde de Goiás,GO
-5494,5215504,Ouvidor,GO
-5495,5215603,Padre Bernardo,GO
-5496,5215652,Palestina de Goiás,GO
-5497,5215702,Palmeiras de Goiás,GO
-5498,5215801,Palmelo,GO
-5499,5215900,Palminópolis,GO
-5500,5216007,Panamá,GO
-5501,5216304,Paranaiguara,GO
-5502,5216403,Paraúna,GO
-5503,5216452,Perolândia,GO
-5504,5216809,Petrolina de Goiás,GO
-5505,5216908,Pilar de Goiás,GO
-5506,5217104,Piracanjuba,GO
-5507,5217203,Piranhas,GO
-5508,5217302,Pirenópolis,GO
-5509,5217401,Pires do Rio,GO
-5510,5217609,Planaltina,GO
-5511,5217708,Pontalina,GO
-5512,5218003,Porangatu,GO
-5513,5218052,Porteirão,GO
-5514,5218102,Portelândia,GO
-5515,5218300,Posse,GO
-5516,5218391,Professor Jamil,GO
-5517,5218508,Quirinópolis,GO
-5518,5218607,Rialma,GO
-5519,5218706,Rianápolis,GO
-5520,5218789,Rio Quente,GO
-5521,5218805,Rio Verde,GO
-5522,5218904,Rubiataba,GO
-5523,5219001,Sanclerlândia,GO
-5524,5219100,Santa Bárbara de Goiás,GO
-5525,5219209,Santa Cruz de Goiás,GO
-5526,5219258,Santa Fé de Goiás,GO
-5527,5219308,Santa Helena de Goiás,GO
-5528,5219357,Santa Isabel,GO
-5529,5219407,Santa Rita do Araguaia,GO
-5530,5219456,Santa Rita do Novo Destino,GO
-5531,5219506,Santa Rosa de Goiás,GO
-5532,5219605,Santa Tereza de Goiás,GO
-5533,5219704,Santa Terezinha de Goiás,GO
-5534,5219712,Santo Antônio da Barra,GO
-5535,5219738,Santo Antônio de Goiás,GO
-5536,5219753,Santo Antônio do Descoberto,GO
-5537,5219803,São Domingos,GO
-5538,5219902,São Francisco de Goiás,GO
-5539,5220009,São João D'Aliança,GO
-5540,5220058,São João da Paraúna,GO
-5541,5220108,São Luís de Montes Belos,GO
-5542,5220157,São Luíz do Norte,GO
-5543,5220207,São Miguel do Araguaia,GO
-5544,5220264,São Miguel do Passa Quatro,GO
-5545,5220280,São Patrício,GO
-5546,5220405,São Simão,GO
-5547,5220454,Senador Canedo,GO
-5548,5220504,Serranópolis,GO
-5549,5220603,Silvânia,GO
-5550,5220686,Simolândia,GO
-5551,5220702,Sítio D'Abadia,GO
-5552,5221007,Taquaral de Goiás,GO
-5553,5221080,Teresina de Goiás,GO
-5554,5221197,Terezópolis de Goiás,GO
-5555,5221304,Três Ranchos,GO
-5556,5221403,Trindade,GO
-5557,5221452,Trombas,GO
-5558,5221502,Turvânia,GO
-5559,5221551,Turvelândia,GO
-5560,5221577,Uirapuru,GO
-5561,5221601,Uruaçu,GO
-5562,5221700,Uruana,GO
-5563,5221809,Urutaí,GO
-5564,5221858,Valparaíso de Goiás,GO
-5565,5221908,Varjão,GO
-5566,5222005,Vianópolis,GO
-5567,5222054,Vicentinópolis,GO
-5568,5222203,Vila Boa,GO
-5569,5222302,Vila Propício,GO
-5570,5300108,Brasília,DF
+5201,5101852,Bom Jesus do Araguaia,MT
+5202,5101902,Brasnorte,MT
+5203,5102504,Cáceres,MT
+5204,5102603,Campinápolis,MT
+5205,5102637,Campo Novo do Parecis,MT
+5206,5102678,Campo Verde,MT
+5207,5102686,Campos de Júlio,MT
+5208,5102694,Canabrava do Norte,MT
+5209,5102702,Canarana,MT
+5210,5102793,Carlinda,MT
+5211,5102850,Castanheira,MT
+5212,5103007,Chapada dos Guimarães,MT
+5213,5103056,Cláudia,MT
+5214,5103106,Cocalinho,MT
+5215,5103205,Colíder,MT
+5216,5103254,Colniza,MT
+5217,5103304,Comodoro,MT
+5218,5103353,Confresa,MT
+5219,5103361,Conquista D'Oeste,MT
+5220,5103379,Cotriguaçu,MT
+5221,5103403,Cuiabá,MT
+5222,5103437,Curvelândia,MT
+5223,5103452,Denise,MT
+5224,5103502,Diamantino,MT
+5225,5103601,Dom Aquino,MT
+5226,5103700,Feliz Natal,MT
+5227,5103809,Figueirópolis D'Oeste,MT
+5228,5103858,Gaúcha do Norte,MT
+5229,5103908,General Carneiro,MT
+5230,5103957,Glória D'Oeste,MT
+5231,5104104,Guarantã do Norte,MT
+5232,5104203,Guiratinga,MT
+5233,5104500,Indiavaí,MT
+5234,5104526,Ipiranga do Norte,MT
+5235,5104542,Itanhangá,MT
+5236,5104559,Itaúba,MT
+5237,5104609,Itiquira,MT
+5238,5104807,Jaciara,MT
+5239,5104906,Jangada,MT
+5240,5105002,Jauru,MT
+5241,5105101,Juara,MT
+5242,5105150,Juína,MT
+5243,5105176,Juruena,MT
+5244,5105200,Juscimeira,MT
+5245,5105234,Lambari D'Oeste,MT
+5246,5105259,Lucas do Rio Verde,MT
+5247,5105309,Luciara,MT
+5248,5105507,Vila Bela da Santíssima Trindade,MT
+5249,5105580,Marcelândia,MT
+5250,5105606,Matupá,MT
+5251,5105622,Mirassol d'Oeste,MT
+5252,5105903,Nobres,MT
+5253,5106000,Nortelândia,MT
+5254,5106109,Nossa Senhora do Livramento,MT
+5255,5106158,Nova Bandeirantes,MT
+5256,5106174,Nova Nazaré,MT
+5257,5106182,Nova Lacerda,MT
+5258,5106190,Nova Santa Helena,MT
+5259,5106208,Nova Brasilândia,MT
+5260,5106216,Nova Canaã do Norte,MT
+5261,5106224,Nova Mutum,MT
+5262,5106232,Nova Olímpia,MT
+5263,5106240,Nova Ubiratã,MT
+5264,5106257,Nova Xavantina,MT
+5265,5106265,Novo Mundo,MT
+5266,5106273,Novo Horizonte do Norte,MT
+5267,5106281,Novo São Joaquim,MT
+5268,5106299,Paranaíta,MT
+5269,5106307,Paranatinga,MT
+5270,5106315,Novo Santo Antônio,MT
+5271,5106372,Pedra Preta,MT
+5272,5106422,Peixoto de Azevedo,MT
+5273,5106455,Planalto da Serra,MT
+5274,5106505,Poconé,MT
+5275,5106653,Pontal do Araguaia,MT
+5276,5106703,Ponte Branca,MT
+5277,5106752,Pontes e Lacerda,MT
+5278,5106778,Porto Alegre do Norte,MT
+5279,5106802,Porto dos Gaúchos,MT
+5280,5106828,Porto Esperidião,MT
+5281,5106851,Porto Estrela,MT
+5282,5107008,Poxoréu,MT
+5283,5107040,Primavera do Leste,MT
+5284,5107065,Querência,MT
+5285,5107107,São José dos Quatro Marcos,MT
+5286,5107156,Reserva do Cabaçal,MT
+5287,5107180,Ribeirão Cascalheira,MT
+5288,5107198,Ribeirãozinho,MT
+5289,5107206,Rio Branco,MT
+5290,5107248,Santa Carmem,MT
+5291,5107263,Santo Afonso,MT
+5292,5107297,São José do Povo,MT
+5293,5107305,São José do Rio Claro,MT
+5294,5107354,São José do Xingu,MT
+5295,5107404,São Pedro da Cipa,MT
+5296,5107578,Rondolândia,MT
+5297,5107602,Rondonópolis,MT
+5298,5107701,Rosário Oeste,MT
+5299,5107743,Santa Cruz do Xingu,MT
+5300,5107750,Salto do Céu,MT
+5301,5107768,Santa Rita do Trivelato,MT
+5302,5107776,Santa Terezinha,MT
+5303,5107792,Santo Antônio do Leste,MT
+5304,5107800,Santo Antônio de Leverger,MT
+5305,5107859,São Félix do Araguaia,MT
+5306,5107875,Sapezal,MT
+5307,5107883,Serra Nova Dourada,MT
+5308,5107909,Sinop,MT
+5309,5107925,Sorriso,MT
+5310,5107941,Tabaporã,MT
+5311,5107958,Tangará da Serra,MT
+5312,5108006,Tapurah,MT
+5313,5108055,Terra Nova do Norte,MT
+5314,5108105,Tesouro,MT
+5315,5108204,Torixoréu,MT
+5316,5108303,União do Sul,MT
+5317,5108352,Vale de São Domingos,MT
+5318,5108402,Várzea Grande,MT
+5319,5108501,Vera,MT
+5320,5108600,Vila Rica,MT
+5321,5108808,Nova Guarita,MT
+5322,5108857,Nova Marilândia,MT
+5323,5108907,Nova Maringá,MT
+5324,5108956,Nova Monte Verde,MT
+5325,5200050,Abadia de Goiás,GO
+5326,5200100,Abadiânia,GO
+5327,5200134,Acreúna,GO
+5328,5200159,Adelândia,GO
+5329,5200175,Água Fria de Goiás,GO
+5330,5200209,Água Limpa,GO
+5331,5200258,Águas Lindas de Goiás,GO
+5332,5200308,Alexânia,GO
+5333,5200506,Aloândia,GO
+5334,5200555,Alto Horizonte,GO
+5335,5200605,Alto Paraíso de Goiás,GO
+5336,5200803,Alvorada do Norte,GO
+5337,5200829,Amaralina,GO
+5338,5200852,Americano do Brasil,GO
+5339,5200902,Amorinópolis,GO
+5340,5201108,Anápolis,GO
+5341,5201207,Anhanguera,GO
+5342,5201306,Anicuns,GO
+5343,5201405,Aparecida de Goiânia,GO
+5344,5201454,Aparecida do Rio Doce,GO
+5345,5201504,Aporé,GO
+5346,5201603,Araçu,GO
+5347,5201702,Aragarças,GO
+5348,5201801,Aragoiânia,GO
+5349,5202155,Araguapaz,GO
+5350,5202353,Arenópolis,GO
+5351,5202502,Aruanã,GO
+5352,5202601,Aurilândia,GO
+5353,5202809,Avelinópolis,GO
+5354,5203104,Baliza,GO
+5355,5203203,Barro Alto,GO
+5356,5203302,Bela Vista de Goiás,GO
+5357,5203401,Bom Jardim de Goiás,GO
+5358,5203500,Bom Jesus de Goiás,GO
+5359,5203559,Bonfinópolis,GO
+5360,5203575,Bonópolis,GO
+5361,5203609,Brazabrantes,GO
+5362,5203807,Britânia,GO
+5363,5203906,Buriti Alegre,GO
+5364,5203939,Buriti de Goiás,GO
+5365,5203962,Buritinópolis,GO
+5366,5204003,Cabeceiras,GO
+5367,5204102,Cachoeira Alta,GO
+5368,5204201,Cachoeira de Goiás,GO
+5369,5204250,Cachoeira Dourada,GO
+5370,5204300,Caçu,GO
+5371,5204409,Caiapônia,GO
+5372,5204508,Caldas Novas,GO
+5373,5204557,Caldazinha,GO
+5374,5204607,Campestre de Goiás,GO
+5375,5204656,Campinaçu,GO
+5376,5204706,Campinorte,GO
+5377,5204805,Campo Alegre de Goiás,GO
+5378,5204854,Campo Limpo de Goiás,GO
+5379,5204904,Campos Belos,GO
+5380,5204953,Campos Verdes,GO
+5381,5205000,Carmo do Rio Verde,GO
+5382,5205059,Castelândia,GO
+5383,5205109,Catalão,GO
+5384,5205208,Caturaí,GO
+5385,5205307,Cavalcante,GO
+5386,5205406,Ceres,GO
+5387,5205455,Cezarina,GO
+5388,5205471,Chapadão do Céu,GO
+5389,5205497,Cidade Ocidental,GO
+5390,5205513,Cocalzinho de Goiás,GO
+5391,5205521,Colinas do Sul,GO
+5392,5205703,Córrego do Ouro,GO
+5393,5205802,Corumbá de Goiás,GO
+5394,5205901,Corumbaíba,GO
+5395,5206206,Cristalina,GO
+5396,5206305,Cristianópolis,GO
+5397,5206404,Crixás,GO
+5398,5206503,Cromínia,GO
+5399,5206602,Cumari,GO
+5400,5206701,Damianópolis,GO
+5401,5206800,Damolândia,GO
+5402,5206909,Davinópolis,GO
+5403,5207105,Diorama,GO
+5404,5207253,Doverlândia,GO
+5405,5207352,Edealina,GO
+5406,5207402,Edéia,GO
+5407,5207501,Estrela do Norte,GO
+5408,5207535,Faina,GO
+5409,5207600,Fazenda Nova,GO
+5410,5207808,Firminópolis,GO
+5411,5207907,Flores de Goiás,GO
+5412,5208004,Formosa,GO
+5413,5208103,Formoso,GO
+5414,5208152,Gameleira de Goiás,GO
+5415,5208301,Divinópolis de Goiás,GO
+5416,5208400,Goianápolis,GO
+5417,5208509,Goiandira,GO
+5418,5208608,Goianésia,GO
+5419,5208707,Goiânia,GO
+5420,5208806,Goianira,GO
+5421,5208905,Goiás,GO
+5422,5209101,Goiatuba,GO
+5423,5209150,Gouvelândia,GO
+5424,5209200,Guapó,GO
+5425,5209291,Guaraíta,GO
+5426,5209408,Guarani de Goiás,GO
+5427,5209457,Guarinos,GO
+5428,5209606,Heitoraí,GO
+5429,5209705,Hidrolândia,GO
+5430,5209804,Hidrolina,GO
+5431,5209903,Iaciara,GO
+5432,5209937,Inaciolândia,GO
+5433,5209952,Indiara,GO
+5434,5210000,Inhumas,GO
+5435,5210109,Ipameri,GO
+5436,5210158,Ipiranga de Goiás,GO
+5437,5210208,Iporá,GO
+5438,5210307,Israelândia,GO
+5439,5210406,Itaberaí,GO
+5440,5210562,Itaguari,GO
+5441,5210604,Itaguaru,GO
+5442,5210802,Itajá,GO
+5443,5210901,Itapaci,GO
+5444,5211008,Itapirapuã,GO
+5445,5211206,Itapuranga,GO
+5446,5211305,Itarumã,GO
+5447,5211404,Itauçu,GO
+5448,5211503,Itumbiara,GO
+5449,5211602,Ivolândia,GO
+5450,5211701,Jandaia,GO
+5451,5211800,Jaraguá,GO
+5452,5211909,Jataí,GO
+5453,5212006,Jaupaci,GO
+5454,5212055,Jesúpolis,GO
+5455,5212105,Joviânia,GO
+5456,5212204,Jussara,GO
+5457,5212253,Lagoa Santa,GO
+5458,5212303,Leopoldo de Bulhões,GO
+5459,5212501,Luziânia,GO
+5460,5212600,Mairipotaba,GO
+5461,5212709,Mambaí,GO
+5462,5212808,Mara Rosa,GO
+5463,5212907,Marzagão,GO
+5464,5212956,Matrinchã,GO
+5465,5213004,Maurilândia,GO
+5466,5213053,Mimoso de Goiás,GO
+5467,5213087,Minaçu,GO
+5468,5213103,Mineiros,GO
+5469,5213400,Moiporá,GO
+5470,5213509,Monte Alegre de Goiás,GO
+5471,5213707,Montes Claros de Goiás,GO
+5472,5213756,Montividiu,GO
+5473,5213772,Montividiu do Norte,GO
+5474,5213806,Morrinhos,GO
+5475,5213855,Morro Agudo de Goiás,GO
+5476,5213905,Mossâmedes,GO
+5477,5214002,Mozarlândia,GO
+5478,5214051,Mundo Novo,GO
+5479,5214101,Mutunópolis,GO
+5480,5214408,Nazário,GO
+5481,5214507,Nerópolis,GO
+5482,5214606,Niquelândia,GO
+5483,5214705,Nova América,GO
+5484,5214804,Nova Aurora,GO
+5485,5214838,Nova Crixás,GO
+5486,5214861,Nova Glória,GO
+5487,5214879,Nova Iguaçu de Goiás,GO
+5488,5214903,Nova Roma,GO
+5489,5215009,Nova Veneza,GO
+5490,5215207,Novo Brasil,GO
+5491,5215231,Novo Gama,GO
+5492,5215256,Novo Planalto,GO
+5493,5215306,Orizona,GO
+5494,5215405,Ouro Verde de Goiás,GO
+5495,5215504,Ouvidor,GO
+5496,5215603,Padre Bernardo,GO
+5497,5215652,Palestina de Goiás,GO
+5498,5215702,Palmeiras de Goiás,GO
+5499,5215801,Palmelo,GO
+5500,5215900,Palminópolis,GO
+5501,5216007,Panamá,GO
+5502,5216304,Paranaiguara,GO
+5503,5216403,Paraúna,GO
+5504,5216452,Perolândia,GO
+5505,5216809,Petrolina de Goiás,GO
+5506,5216908,Pilar de Goiás,GO
+5507,5217104,Piracanjuba,GO
+5508,5217203,Piranhas,GO
+5509,5217302,Pirenópolis,GO
+5510,5217401,Pires do Rio,GO
+5511,5217609,Planaltina,GO
+5512,5217708,Pontalina,GO
+5513,5218003,Porangatu,GO
+5514,5218052,Porteirão,GO
+5515,5218102,Portelândia,GO
+5516,5218300,Posse,GO
+5517,5218391,Professor Jamil,GO
+5518,5218508,Quirinópolis,GO
+5519,5218607,Rialma,GO
+5520,5218706,Rianápolis,GO
+5521,5218789,Rio Quente,GO
+5522,5218805,Rio Verde,GO
+5523,5218904,Rubiataba,GO
+5524,5219001,Sanclerlândia,GO
+5525,5219100,Santa Bárbara de Goiás,GO
+5526,5219209,Santa Cruz de Goiás,GO
+5527,5219258,Santa Fé de Goiás,GO
+5528,5219308,Santa Helena de Goiás,GO
+5529,5219357,Santa Isabel,GO
+5530,5219407,Santa Rita do Araguaia,GO
+5531,5219456,Santa Rita do Novo Destino,GO
+5532,5219506,Santa Rosa de Goiás,GO
+5533,5219605,Santa Tereza de Goiás,GO
+5534,5219704,Santa Terezinha de Goiás,GO
+5535,5219712,Santo Antônio da Barra,GO
+5536,5219738,Santo Antônio de Goiás,GO
+5537,5219753,Santo Antônio do Descoberto,GO
+5538,5219803,São Domingos,GO
+5539,5219902,São Francisco de Goiás,GO
+5540,5220009,São João d'Aliança,GO
+5541,5220058,São João da Paraúna,GO
+5542,5220108,São Luís de Montes Belos,GO
+5543,5220157,São Luiz do Norte,GO
+5544,5220207,São Miguel do Araguaia,GO
+5545,5220264,São Miguel do Passa Quatro,GO
+5546,5220280,São Patrício,GO
+5547,5220405,São Simão,GO
+5548,5220454,Senador Canedo,GO
+5549,5220504,Serranópolis,GO
+5550,5220603,Silvânia,GO
+5551,5220686,Simolândia,GO
+5552,5220702,Sítio d'Abadia,GO
+5553,5221007,Taquaral de Goiás,GO
+5554,5221080,Teresina de Goiás,GO
+5555,5221197,Terezópolis de Goiás,GO
+5556,5221304,Três Ranchos,GO
+5557,5221403,Trindade,GO
+5558,5221452,Trombas,GO
+5559,5221502,Turvânia,GO
+5560,5221551,Turvelândia,GO
+5561,5221577,Uirapuru,GO
+5562,5221601,Uruaçu,GO
+5563,5221700,Uruana,GO
+5564,5221809,Urutaí,GO
+5565,5221858,Valparaíso de Goiás,GO
+5566,5221908,Varjão,GO
+5567,5222005,Vianópolis,GO
+5568,5222054,Vicentinópolis,GO
+5569,5222203,Vila Boa,GO
+5570,5222302,Vila Propício,GO
+5571,5300108,Brasília,DF

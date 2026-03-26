@@ -14,8 +14,6 @@ select
     score_risco_fiscal,
     classificacao_risco,
     score_capag,
-    score_endividamento,
-    score_poupanca,
     score_crescimento_pib,
     indicador_1 as endividamento,
     indicador_2 as poupanca_corrente,

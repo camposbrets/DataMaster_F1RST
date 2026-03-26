@@ -17,11 +17,6 @@ cleaned as (
         cast(cod_ibge as int64) as cod_ibge,
         trim(nome_municipio) as nome_municipio,
         upper(trim(uf)) as uf,
-        safe_cast(valor_adicionado_agropecuaria as float64) as va_agropecuaria,
-        safe_cast(valor_adicionado_industria as float64) as va_industria,
-        safe_cast(valor_adicionado_servicos as float64) as va_servicos,
-        safe_cast(valor_adicionado_administracao_publica as float64) as va_administracao_publica,
-        safe_cast(impostos as float64) as impostos,
         safe_cast(pib as float64) as pib,
         {{ dbt_utils.generate_surrogate_key(['cod_ibge', 'ano']) }} as pib_sk
     from source

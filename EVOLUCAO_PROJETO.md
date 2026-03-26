@@ -15,13 +15,14 @@ O projeto original entregava um pipeline funcional, porem com limitacoes que nao
 |---|---|---|
 | **Fonte de dados** | 1 (CAPAG) | 3 (CAPAG + PIB Municipal + Cidades IBGE) |
 | **Arquitetura dbt** | 2 camadas (transform + report) | 3 camadas Medalhao (Bronze + Silver + Gold) |
-| **Modelos dbt** | 8 modelos | 27 modelos |
-| **Testes dbt** | 0 | 5 testes singulares + testes genericos (relationships, accepted_range, accepted_values) |
-| **DAG Airflow** | 130 linhas, sem retries | 360+ linhas, pipeline end-to-end com retries, timeouts e callback |
-| **Source freshness** | Nao existia | Configurado por fonte (CAPAG: 120d, PIB: 365d) |
-| **Score de risco** | Nao existia | Score composto 0-100 com 4 classificacoes |
-| **Insights automaticos** | Nao existia | 6 tipos de insights com narrativa |
-| **Download de dados** | Manual (CSV estatico) | Automatizado via API |
+| **Modelos dbt** | 4 modelos (transform + report) | 18 modelos ativos (3 bronze + 5 silver + 10 gold) |
+| **Testes dbt** | 0 | 5 testes singulares + testes genericos (unique, not_null, relationships, accepted_range, accepted_values) |
+| **DAG Airflow** | ~130 linhas, sem retries | ~400 linhas, pipeline end-to-end com retries, timeouts, callback e download incremental |
+| **Source freshness** | Nao existia | Configurado por fonte (CAPAG: 120d warn/180d error, PIB: 365d warn/450d error) |
+| **Score de risco** | Nao existia | Score composto 0-100 com 5 classificacoes (incluindo INDETERMINADO) |
+| **Insights automaticos** | Nao existia | 6 tipos de insights com narrativa automatica |
+| **Download de dados** | Manual (CSV estatico) | Automatizado via API com logica incremental (baixa apenas anos novos) |
+| **Qualidade de dados** | SODA (ferramenta externa) | dbt tests nativos integrados ao pipeline |
 
 ---
 
@@ -48,10 +49,10 @@ dados brutos       limpeza/tipagem      modelos analiticos
 ### Estrutura atual
 ```
 bronze/                -> Views espelhando dados brutos (3 modelos)
-silver/                -> Limpeza, tipagem, deduplicacao (5 modelos)
-gold/                  -> Dimensoes, fatos, reports (12 modelos)
-tests/                 -> Validacoes automatizadas (5 testes)
-macros/                -> Logica reutilizavel (1 macro)
+silver/                -> Limpeza, tipagem, deduplicacao, dimensoes (5 modelos)
+gold/                  -> Dimensoes, fatos, reports (10 modelos)
+tests/                 -> Validacoes automatizadas (5 testes singulares)
+macros/                -> Logica reutilizavel (1 macro: generate_schema_name)
 ```
 
 ---
@@ -63,9 +64,10 @@ O projeto analisava apenas dados CAPAG (capacidade de pagamento), que sao indica
 
 ### O que foi feito
 Integrei os dados de **PIB Municipal do IBGE** (tabela SIDRA 5938), incluindo:
-- PIB total por municipio/ano
-- Valor adicionado por setor (agropecuaria, industria, servicos, administracao publica)
-- Calculo de taxa de crescimento ano a ano (YoY) via window function `LAG()`
+- PIB total a precos correntes por municipio/ano (variavel 37 — Mil Reais)
+- Calculo de taxa de crescimento ano a ano (YoY) via window function `LAG()` + `SAFE_DIVIDE` no modelo `gld_fato_pib_municipal`
+
+Tambem integrei o **cadastro de municipios** da API de Localidades do IBGE, garantindo que novos municipios sejam incorporados automaticamente.
 
 ### Por que
 - **Analise multidimensional**: um municipio pode ter CAPAG "A" (boa capacidade de pagamento) mas PIB estagnado — isso indica risco futuro. O cruzamento CAPAG + PIB revela padroes que nenhum dos dois dados mostra isoladamente.
@@ -82,51 +84,58 @@ O projeto original exibia os 3 indicadores CAPAG (endividamento, poupanca, liqui
 ### O que foi feito
 Criei o modelo `gld_fato_risco_fiscal` — um **score composto de 0 a 100 pontos** que transforma dados brutos em inteligencia acionavel:
 
-| Componente | Peso | Justificativa do peso |
+| Componente | Peso | Criterio |
 |---|---|---|
-| Score CAPAG | 0-40 pts (40%) | A classificacao oficial do Tesouro e o indicador mais confiavel |
-| Score Endividamento | 0-20 pts (20%) | Indicador_1 mede comprometimento da receita com divida |
-| Score Poupanca | 0-20 pts (20%) | Indicador_2 mede capacidade de gerar superavit |
-| Score Crescimento PIB | 0-10 pts (10%) | Contexto economico — municipio em crescimento tem mais resiliencia |
+| Classificacao CAPAG | 0-70 pts | A=70, B=50, C=25, D=0 — ja consolida endividamento, poupanca corrente e liquidez |
+| Crescimento PIB | 0-30 pts | >=10%=30, >=5%=24, >=2%=18, >=0%=12, <0%=6, nulo=0 |
+
+**Justificativa dos pesos**: a classificacao CAPAG e o indicador oficial do Tesouro Nacional — ja consolida os 3 indicadores fiscais (endividamento, poupanca corrente, liquidez) em uma unica nota auditada. Por isso assume o maior peso (70%). O crescimento do PIB complementa com contexto economico (30%), indicando se o municipio tem tendencia de melhoria ou piora na arrecadacao futura.
+
+**Comportamento adaptativo** (modelo nao quebra com dados faltantes):
+- **CAPAG + PIB disponiveis** → score = score_capag + score_pib (0-100)
+- **Apenas CAPAG** → score reescalado: `round(score_capag * 100 / 70)` (0-100)
+- **Apenas PIB** → score reescalado: `round(score_pib * 100 / 30)` (0-100)
+- **Nenhum** → score = NULL → classificacao = INDETERMINADO
 
 **Classificacao resultante:**
 - **BAIXO** (>= 72): municipio com boa saude fiscal
 - **MODERADO** (>= 54): atencao necessaria
 - **ELEVADO** (>= 36): risco significativo, intervencao recomendada
 - **CRITICO** (< 36): situacao grave, acao urgente necessaria
+- **INDETERMINADO**: dados insuficientes para classificar
 
 ### Por que
 - **Dado bruto nao e informacao**: um indicador de endividamento de 0.45 nao significa nada para um gestor. Mas dizer que o municipio esta em "risco CRITICO com score 28/100" e acionavel.
+- **Sem duplicacao de indicadores**: a versao anterior do score decompunha o CAPAG em sub-indicadores (endividamento, poupanca), duplicando informacao que ja esta consolidada na classificacao A/B/C/D. A versao atual usa a classificacao CAPAG diretamente (que ja pondera os 3 indicadores internamente) e adiciona apenas o PIB como dimensao complementar.
 - **Padrao de mercado financeiro**: scores compostos sao usados por agencias de rating (Moody's, S&P, Fitch) e pelo proprio Banco Central. Aplicar essa logica a dados publicos demonstra maturidade analitica.
 - **Habilita dashboards inteligentes**: com o score, consigo criar alertas automaticos, rankings, mapas de calor e analises comparativas que nao seriam possiveis com dados brutos.
 
 Tambem adicionei:
-- **`faixa_populacao`** (Pequeno/Medio/Grande/Metropole): permite analisar se o porte do municipio influencia no risco fiscal.
-- **Particionamento por `ano_base`** e **clustering por `classificacao_risco, uf`**: otimizacoes de performance no BigQuery que reduzem custo de queries em ate 90% em tabelas grandes.
+- **`faixa_populacao`** (Pequeno < 20k, Medio 20k-100k, Grande 100k-500k, Metropole > 500k): permite analisar se o porte do municipio influencia no risco fiscal.
+- **`tem_pib`**: flag booleana indicando se o municipio tem dados de PIB para o ano — transparencia sobre quais scores foram calculados com ou sem contexto economico.
+- **Particionamento por `ano_base`** (range 2015-2030) e **clustering por `classificacao_risco, uf`**: otimizacoes de performance no BigQuery que reduzem custo de queries em ate 90% em tabelas grandes.
 
 ---
 
 ## 6. REPORTS ANALITICOS PRE-CALCULADOS
 
 ### O que era
-4 reports basicos que apenas listavam indicadores por cidade/ano, sem agregacao ou analise comparativa.
+Reports basicos que apenas listavam indicadores por cidade/ano, sem agregacao ou analise comparativa.
 
 ### O que foi feito
-Criei 6 novos reports analiticos, cada um com uma perspectiva de negocio especifica:
+Criei 4 reports analiticos, cada um com uma perspectiva de negocio especifica:
 
 | Report | Finalidade | Por que existe |
 |---|---|---|
-| `gld_report_risco_fiscal_municipal` | Visao detalhada por municipio | Permite drill-down em municipios especificos — essencial para auditoria |
-| `gld_report_tendencia_anual` | Tendencia YoY (MELHORIA/PIORA/ESTAVEL) | Gestores precisam saber a **direcao**, nao so a foto atual. Um municipio com score 50 melhorando e diferente de um com score 50 piorando |
-| `gld_report_capag_vs_pib` | Correlacao CAPAG x economia | Revela se problemas fiscais sao estruturais ou conjunturais |
-| `gld_report_distribuicao_geografica` | Distribuicao por UF | Identifica regioes com concentracao de risco — util para politicas publicas regionais |
-| `gld_report_agregacao_estadual` | Resumo executivo por estado | Visao C-level: "qual % dos municipios do meu estado esta em risco alto?" |
-| `gld_report_classificacao_uf` | CAPAG por estado e ano | Evolucao historica da classificacao por regiao |
+| `gld_report_risco_fiscal_municipal` | Visao detalhada por municipio: score, classificacao, indicadores, PIB | Permite drill-down em municipios especificos — essencial para auditoria e dashboards filtrados |
+| `gld_report_tendencia_anual` | Tendencia YoY (MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO) | Gestores precisam saber a **direcao**, nao so a foto atual. Um municipio com score 50 melhorando e diferente de um com score 50 piorando |
+| `gld_report_capag_vs_pib` | Correlacao CAPAG x economia (apenas municipios com PIB) | Revela se problemas fiscais sao estruturais ou conjunturais — filtra apenas municipios com dados de PIB para nao distorcer a analise |
+| `gld_report_agregacao_estadual` | Resumo executivo por estado: totais, medias, % risco alto | Visao C-level: "qual % dos municipios do meu estado esta em risco alto?" — inclui PIB total do estado e indicadores medios |
 
 ### Por que
 - **Reports pre-calculados vs queries ad-hoc**: em producao, dashboards que fazem agregacoes pesadas em tempo real ficam lentos e custam caro no BigQuery. Pre-calcular as agregacoes no dbt e uma **best practice** que reduz latencia e custo.
-- **Cada report atende um stakeholder diferente**: gestor municipal quer ver seu municipio (report municipal), secretario estadual quer visao do estado (agregacao estadual), analista federal quer panorama nacional (distribuicao geografica).
-- **Self-join para tendencia**: o `gld_report_tendencia_anual` usa self-join do fato com o ano anterior — tecnica avancada que demonstra dominio de SQL analitico e window functions.
+- **Cada report atende um stakeholder diferente**: gestor municipal quer ver seu municipio (report municipal), secretario estadual quer visao do estado (agregacao estadual), analista quer comparar CAPAG com PIB (capag_vs_pib).
+- **Self-join para tendencia**: o `gld_report_tendencia_anual` usa self-join do fato consigo mesmo para o ano anterior (`c.ano_base = p.ano_base + 1`) — tecnica avancada que demonstra dominio de SQL analitico.
 
 ---
 
@@ -145,21 +154,24 @@ Removi o Soda e integrei a qualidade diretamente no pipeline dbt:
 **Na camada Silver (tratamento preventivo):**
 - `SAFE_CAST` para tipagem segura (nao quebra se vier dado invalido)
 - `TRIM` e `UPPER` para padronizacao de strings
-- Tratamento de `'n.d.'` (nao disponivel) como NULL
-- Conversao de virgula para ponto em campos decimais
-- `ROW_NUMBER()` para deduplicacao deterministica
-- Surrogate keys via `generate_surrogate_key` para integridade referencial
+- Tratamento de `'n.d.'` (nao disponivel) como NULL via `NULLIF`
+- Conversao de virgula para ponto em campos decimais (`REPLACE`)
+- `ROW_NUMBER()` para deduplicacao deterministica (particionando por cod_ibge + ano_base)
+- Surrogate keys via `generate_surrogate_key` (hash MD5) para integridade referencial
+- Filtro `WHERE cod_ibge IS NOT NULL AND ano_base IS NOT NULL` para eliminar registros invalidos
 
-**Testes dbt (validacao reativa):**
-- 5 testes singulares validando existencia de dados por camada
-- Testes genericos `not_null`, `unique` em chaves primarias e surrogate keys
-- Testes `accepted_values` em classificacoes (CAPAG A/B/C/D, risco BAIXO/MODERADO/ELEVADO/CRITICO, tendencia)
+**Testes dbt (validacao reativa — 3 camadas de YAMLs + 5 testes singulares):**
+- 5 testes singulares validando existencia de dados por camada (`HAVING count(*) = 0`)
+- Testes genericos `not_null`, `unique` em chaves primarias e surrogate keys (capag_sk, pib_sk, indicador_id, pib_id, risco_fiscal_id)
+- Testes `accepted_values` em classificacoes (CAPAG A/B/C/D, risco BAIXO/MODERADO/ELEVADO/CRITICO/INDETERMINADO, tendencia MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO)
 - Testes `accepted_range` em metricas numericas (score 0-100, PIB >= 0)
-- **Testes `relationships`** validando integridade referencial entre fatos e dimensoes (ex: todo `uf_id` na fato existe na `gld_dim_uf`)
+- **Testes `relationships`** validando integridade referencial entre fatos e dimensoes (ex: todo `uf_id` em gld_fato_indicadores_capag existe na `gld_dim_uf`, todo `classificacao_capag_id` existe na `gld_dim_classificacao_capag`)
+- UFs validas (27 estados) via accepted_values na camada Silver
 
 **Source freshness (monitoramento de atualizacao):**
 - CAPAG: alerta apos 120 dias sem atualizacao, erro apos 180 dias (dado quadrimestral)
-- PIB: alerta apos 365 dias, erro apos 450 dias (dado anual)
+- PIB: alerta apos 365 dias, erro apos 450 dias (dado anual com defasagem ~2 anos)
+- Campo `loaded_at_field: _PARTITIONTIME` nas sources capag e pib
 - Executado via `dbt source freshness` para deteccao automatica de dados obsoletos
 
 ### Por que
@@ -178,21 +190,33 @@ Removi o Soda e integrei a qualidade diretamente no pipeline dbt:
 CSVs estaticos commitados no repositorio. Para atualizar, era necessario baixar manualmente os arquivos e substituir.
 
 ### O que foi feito
-Criei tasks Airflow que baixam automaticamente:
-- `download_capag.py`: consome a API do portal dados.gov.br e consolida os CSVs
-- `download_pib.py`: consome a API SIDRA do IBGE (tabela 5938) via biblioteca `sidrapy`
+Criei 3 scripts de download automatico + 1 modulo utilitario, executados como tasks Airflow:
+
+| Script | Fonte | Logica |
+|---|---|---|
+| `download_capag.py` | API dados.gov.br | Busca lista de recursos XLSX, seleciona o mais recente por ano, normaliza colunas com mapeamento flexivel, consolida em CSV |
+| `download_pib.py` | API SIDRA/IBGE (tabela 5938) | Baixa variavel 37 (PIB a precos correntes) para todos os municipios, com retry automatico via `requests.Session` |
+| `download_cidades.py` | API Localidades IBGE | Cadastro de municipios, validacao (>5000 municipios, 27 UFs) |
+| `gcs_utils.py` | Google Cloud Storage | Verifica anos existentes no GCS antes de baixar, evita reprocessamento |
+
+**Logica incremental (CAPAG e PIB):**
+1. Antes de baixar, o script verifica quais anos ja existem — primeiro tenta ler do GCS (`gcs_utils.read_csv_years_from_gcs`), se falhar usa fallback local
+2. Compara com os anos disponiveis na API
+3. Baixa apenas anos novos
+4. Concatena ao CSV existente (append, nao sobrescreve)
 
 ### Por que
 - **Pipeline end-to-end**: um pipeline de dados profissional nao depende de acoes manuais. O dado deve fluir da fonte ate o dashboard sem intervencao humana.
+- **Download incremental**: evita baixar novamente dados ja processados. Em APIs lentas (SIDRA pode levar minutos), isso reduz significativamente o tempo de execucao.
 - **Dados sempre atualizados**: quando o Tesouro Nacional ou o IBGE publicam novos dados, basta executar a DAG e tudo se atualiza automaticamente.
 - **Reprodutibilidade**: qualquer pessoa pode clonar o projeto e executar — nao precisa saber de onde baixar os CSVs nem em qual formato.
-- **Padrao de ingestao**: usar APIs oficiais (dados.gov.br, SIDRA) em vez de CSVs estaticos demonstra conhecimento de integracao com fontes de dados governamentais.
+- **Resiliencia**: `download_pib.py` usa `requests.Session` com retry strategy (3 tentativas, backoff exponencial, retry em 429/500/502/503/504). `download_capag.py` tem fallback com `openpyxl` direto quando pandas falha na leitura de XLSX com dimensoes incorretas.
 
 ---
 
 ## 9. DAG AIRFLOW REPENSADA
 
-### O que era (130 linhas)
+### O que era (~130 linhas)
 ```
 upload_capag  -> create_dataset -> load_to_bq -> dbt_transform -> soda_checks
 upload_cidades -> create_dataset -> load_to_bq -----^
@@ -201,28 +225,39 @@ upload_cidades -> create_dataset -> load_to_bq -----^
 - Sem documentacao
 - Tags genericas
 
-### O que foi feito (360+ linhas)
+### O que foi feito (~400 linhas)
 ```
 download_capag  -> upload_gcs -> create_dataset -> load_bq --|
 download_pib   -> upload_gcs -> create_dataset -> load_bq ---|  (retries=2, timeout=30min)
-                  upload_cidades -> create_dataset -> load_bq-|
+download_cidades -> upload_cidades -> create_dataset -> load_bq-|
                                                               v
-                                                         dbt_bronze
+                                          [create_bronze/silver/gold datasets]
+                                                              v
+                                                         dbt_bronze (DbtTaskGroup)
                                                               |
-                                                         dbt_silver (+ testes)
+                                                         dbt_test_bronze (external_python)
                                                               |
-                                                         dbt_gold (+ testes + relationships)
+                                                         dbt_silver (DbtTaskGroup)
+                                                              |
+                                                         dbt_test_silver (external_python)
+                                                              |
+                                                         dbt_gold (DbtTaskGroup)
+                                                              |
+                                                         dbt_test_gold (external_python)
+                                                              |
+                                                         generate_insights (@task)
 ```
 
 ### Por que
 - **Separacao de etapas dbt por camada**: permite reprocessar apenas a camada que falhou. Se o Gold der erro, nao preciso reprocessar Bronze e Silver — economiza tempo e custo de processamento.
-- **Testes entre camadas**: se o Silver falhar nos testes, o Gold nem executa. Isso evita propagar dados ruins para a camada de consumo (fail-fast principle).
+- **Testes entre camadas via `chain()`**: se o Silver falhar nos testes, o Gold nem executa. Isso evita propagar dados ruins para a camada de consumo (fail-fast principle).
+- **`@task.external_python` para testes**: os testes dbt rodam no `dbt_venv` (virtual environment separado no Docker), isolando dependencias do dbt das dependencias do Airflow.
 - **`doc_md` na DAG**: documentacao inline que aparece na UI do Airflow. Qualquer pessoa que abrir a DAG entende o que ela faz, quais fontes usa e qual o fluxo — essencial em times grandes.
 - **Docstrings em cada task**: padrao Python para documentacao de funcoes. Facilita manutencao e onboarding de novos membros.
 - **Retries e timeouts**: tasks de download tem 2 retries com intervalo de 3 minutos (APIs externas podem estar temporariamente indisponiveis). Cada task tem timeout de 60min e o pipeline completo tem timeout de 4h.
-- **on_failure_callback**: quando uma task falha, um callback loga informacoes estruturadas (task, DAG, execucao). Em producao, esse callback seria estendido para enviar notificacoes via Slack ou email.
+- **on_failure_callback**: quando uma task falha, um callback loga informacoes estruturadas (task_id, dag_id, execution_date). Em producao, esse callback seria estendido para enviar notificacoes via Slack ou email.
 - **max_active_runs=1**: impede que multiplas execucoes da mesma DAG rodem ao mesmo tempo, evitando conflitos de escrita no BigQuery.
-- **Variaveis centralizadas**: bucket, project ID e paths centralizados em variaveis no topo do arquivo em vez de hardcoded em 15+ lugares. Facilita mudanca de ambiente (dev/staging/prod).
+- **Variaveis centralizadas**: `GCS_BUCKET`, `GCP_CONN_ID`, `PROJECT_ID`, `BASE_PATH` centralizados no topo do arquivo em vez de hardcoded em 15+ lugares. Facilita mudanca de ambiente (dev/staging/prod).
 
 ---
 
@@ -232,16 +267,18 @@ download_pib   -> upload_gcs -> create_dataset -> load_bq ---|  (retries=2, time
 Nao existia. O projeto entregava tabelas no BigQuery e o usuario precisava criar suas proprias analises.
 
 ### O que foi feito
-Criei `generate_insights.py` — um script que le as tabelas Gold e gera **narrativas automaticas em linguagem natural**:
+Criei `generate_insights.py` — um script que conecta no BigQuery, le as tabelas Gold e gera **6 tipos de narrativas automaticas em linguagem natural**:
 
-| Insight | Exemplo de narrativa gerada |
-|---|---|
-| Resumo Geral | "Dos 5.570 municipios analisados, 23% apresentam risco ELEVADO ou CRITICO, com score medio de 54.3" |
-| Piores Municipios | "Os 10 municipios com maior risco fiscal sao: ... todos com score abaixo de 25" |
-| Estados Criticos | "Maranhao lidera com 45% dos municipios em risco alto, seguido por Para (38%)" |
-| Tendencias | "Em relacao ao ano anterior, 1.200 municipios melhoraram e 890 pioraram" |
+| Insight | Prioridade | Exemplo de narrativa gerada |
+|---|---|---|
+| Resumo Geral | 1 | "No ano base 2023, foram analisados 5.570 municipios. O score medio foi 54.3. 1.280 municipios (23%) estao em situacao CRITICA..." |
+| Piores Municipios | 2 | "Os municipios em pior situacao fiscal sao: Municipio-X-MA (score: 12), Municipio-Y-PA (score: 15)..." |
+| Melhores Municipios | 3 | "Os municipios com melhor saude fiscal sao: Municipio-A-SP (score: 98)..." |
+| Estados Criticos | 4 | "Os estados com maior percentual de municipios em risco alto sao: MA (45%), PA (38%)..." |
+| Tendencias | 5 | "No ano base 2023, comparado ao anterior: 1.200 municipios melhoraram, 890 pioraram e 3.480 permaneceram estaveis" |
+| CAPAG vs PIB | 6 | "A analise por faixa populacional revela: Pequeno (< 20k): 15% em risco critico; Metropole: 3% em risco critico" |
 
-Os insights sao salvos na tabela `gold.insights_risco_fiscal` do BigQuery, prontos para exibicao no Metabase.
+Os insights sao salvos na tabela `gold.insights_risco_fiscal` do BigQuery (WRITE_TRUNCATE — recria a cada execucao), prontos para exibicao no Metabase.
 
 ### Por que
 - **Data Storytelling**: o mercado valoriza profissionais que nao apenas transformam dados, mas extraem significado deles. Gerar narrativas automaticas e uma pratica de **Data Storytelling** que transforma numeros em historias compreensiveis.
@@ -256,8 +293,14 @@ Os insights sao salvos na tabela `gold.insights_risco_fiscal` do BigQuery, pront
 Tabelas sem particionamento ou clustering. Cada query escaneava a tabela inteira.
 
 ### O que foi feito
-- **Particionamento por ano** (RANGE): tabelas fato particionadas por `ano_base` ou `ano`
-- **Clustering** por colunas de filtro frequente (`uf`, `classificacao_risco`, `classificacao_capag_id`)
+
+| Tabela | Particionamento | Clustering |
+|---|---|---|
+| `slv_capag_municipios` | ano_base (range 2015-2030) | — |
+| `slv_pib_municipal` | ano (range 2002-2030) | — |
+| `gld_fato_indicadores_capag` | ano_base (range 2015-2030) | uf_id, classificacao_capag_id |
+| `gld_fato_pib_municipal` | ano (range 2002-2030) | uf_id |
+| `gld_fato_risco_fiscal` | ano_base (range 2015-2030) | classificacao_risco, uf |
 
 ### Por que
 - **Reducao de custo**: no BigQuery, voce paga por byte escaneado. Com particionamento, uma query que filtra `WHERE ano_base = 2023` escaneia apenas 1 particao em vez da tabela inteira — reducao de ate **90% no custo**.
@@ -268,31 +311,34 @@ Tabelas sem particionamento ou clustering. Cada query escaneava a tabela inteira
 
 ## 12. RESUMO DE ARQUIVOS
 
-### Arquivos NOVOS (30 arquivos criados)
+### Arquivos NOVOS criados
 ```
-include/dataset/download_capag.py          -> Download automatizado CAPAG
-include/dataset/download_pib.py            -> Download automatizado PIB
-include/dataset/PIB_MUNICIPAL.csv          -> Nova fonte de dados
+include/dataset/download_capag.py           -> Download automatizado CAPAG (incremental)
+include/dataset/download_pib.py             -> Download automatizado PIB (incremental)
+include/dataset/download_cidades.py         -> Download automatizado cadastro municipios
+include/dataset/gcs_utils.py                -> Verificacao de anos existentes no GCS
+include/dataset/PIB_MUNICIPAL.csv           -> Nova fonte de dados
 include/dbt/macros/generate_schema_name.sql -> Controle de schemas por camada
-include/dbt/models/bronze/ (3 modelos)     -> Camada Bronze
-include/dbt/models/silver/ (5 modelos)     -> Camada Silver
-include/dbt/models/gold/ (12 modelos)      -> Camada Gold (fatos + reports)
-include/dbt/tests/ (5 testes)              -> Validacoes automatizadas
-include/insights/generate_insights.py       -> Geracao de insights automaticos
+include/dbt/models/bronze/ (3 modelos + yml) -> Camada Bronze
+include/dbt/models/silver/ (5 modelos + yml) -> Camada Silver
+include/dbt/models/gold/ (10 modelos + yml)  -> Camada Gold (dims + fatos + reports)
+include/dbt/tests/ (5 testes singulares)     -> Validacoes automatizadas
+include/insights/generate_insights.py        -> Geracao de insights automaticos
 ```
 
 ### Arquivos MODIFICADOS
 ```
-Dockerfile              -> Removido Soda (imagem mais leve)
-dags/capag.py           -> Reescrito com pipeline end-to-end (130 -> 343 linhas)
-requirements.txt        -> Novas dependencias para download automatizado
-dbt_project.yml         -> Arquitetura Medalhao com schemas e tags
-sources.yml             -> 3 fontes com documentacao
+Dockerfile              -> Removido Soda, agora apenas Astro Runtime 8.8.0 + dbt_venv
+dags/capag.py           -> Reescrito com pipeline end-to-end (~400 linhas)
+requirements.txt        -> astronomer-cosmos, openpyxl, requests, sidrapy, google-cloud-storage
+dbt_project.yml         -> Arquitetura Medalhao com schemas, tags e materializacao por camada
+sources.yml             -> 3 fontes com documentacao e source freshness
+docker-compose.override.yml -> Metabase 0.50.24
 ```
 
-### Arquivos REMOVIDOS (6 arquivos)
+### Arquivos REMOVIDOS
 ```
-include/soda/ (6 arquivos) -> Qualidade migrada para dentro do dbt
+include/soda/ (arquivos) -> Qualidade migrada para dbt tests nativos
 ```
 
 ---
@@ -303,15 +349,15 @@ As melhorias evidenciam dominio nas seguintes areas de um **Engenheiro de Dados 
 
 | Competencia | Como foi demonstrada |
 |---|---|
-| **Arquitetura de dados** | Implementacao da Arquitetura Medalhao (Bronze/Silver/Gold) |
-| **Modelagem dimensional** | Dimensoes e fatos com surrogate keys, star schema |
-| **SQL avancado** | Window functions (LAG, ROW_NUMBER), self-joins, CTEs, CASE expressions complexos |
-| **Orquestracao** | DAG Airflow com retries, timeouts, callback, separacao por camada |
-| **Data Quality** | Tratamento preventivo no Silver + testes automatizados + integridade referencial + source freshness |
-| **Integracao de dados** | Multiplas fontes (APIs governamentais), cruzamento de datasets |
-| **Performance** | Particionamento e clustering no BigQuery |
-| **Automacao** | Download automatico, insights automaticos, pipeline end-to-end |
-| **DevOps/Infra** | Docker otimizado, reducao de dependencias |
-| **Data Storytelling** | Geracao de narrativas automaticas a partir de dados |
-| **Boas praticas** | Nomenclatura padronizada (prefixos brz/slv/gld), documentacao, tags |
-| **Pensamento analitico** | Score de risco composto, analise de tendencias, correlacoes |
+| **Arquitetura de dados** | Implementacao da Arquitetura Medalhao (Bronze/Silver/Gold) com schemas separados |
+| **Modelagem dimensional** | Dimensoes e fatos com surrogate keys (generate_surrogate_key), star schema, FULL OUTER JOIN na dim_instituicoes |
+| **SQL avancado** | Window functions (LAG, ROW_NUMBER, SAFE_DIVIDE), self-joins, CTEs encadeados, CASE expressions com logica adaptativa |
+| **Orquestracao** | DAG Airflow ~400 linhas com retries, timeouts, callback, chain(), DbtTaskGroup, @task.external_python |
+| **Data Quality** | Tratamento preventivo no Silver (SAFE_CAST, NULLIF, dedup) + testes automatizados (unique, not_null, relationships, accepted_values, accepted_range) + source freshness |
+| **Integracao de dados** | 3 fontes (APIs governamentais: dados.gov.br, SIDRA/IBGE, IBGE Localidades), download incremental com GCS fallback |
+| **Performance** | Particionamento RANGE e clustering no BigQuery, reports pre-calculados |
+| **Automacao** | Download incremental, insights automaticos com narrativa, pipeline end-to-end |
+| **DevOps/Infra** | Docker otimizado (Astro Runtime + dbt_venv), Metabase via docker-compose, reducao de dependencias |
+| **Data Storytelling** | 6 tipos de insights automaticos com narrativas acionaveis |
+| **Boas praticas** | Nomenclatura padronizada (prefixos brz/slv/gld), documentacao (doc_md, docstrings), tags por camada, variaveis centralizadas |
+| **Pensamento analitico** | Score de risco composto adaptativo (0-100), classificacao de risco, faixa populacional, tendencias YoY |
