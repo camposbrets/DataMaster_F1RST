@@ -191,7 +191,7 @@
 
 ### P: O que voce faria diferente se fosse comecar do zero?
 
-**R:** "Provavelmente usaria dbt incremental nos modelos fato se o volume fosse maior, e implementaria data contracts no dbt pra garantir que o schema das tabelas nao mude sem intencao. Tambem consideraria usar o `dbt docs generate` pra gerar documentacao automatica do lineage dos modelos — ja que o dbt cria isso de graca. E adicionaria um pipeline de CI/CD (GitHub Actions) com `dbt parse` e `dbt test` rodando automaticamente em cada PR."
+**R:** "Provavelmente usaria dbt incremental nos modelos fato se o volume fosse maior, e implementaria data contracts no dbt pra garantir que o schema das tabelas nao mude sem intencao. Tambem consideraria usar o `dbt docs generate` pra gerar documentacao automatica do lineage dos modelos — ja que o dbt cria isso de graca. O CI/CD com GitHub Actions ja esta implementado: tenho validacao do dbt com `dbt parse` e deploy automatico da infraestrutura Terraform em cada merge na main."
 
 ### P: Por que Metabase e nao Power BI ou Looker?
 
@@ -225,7 +225,37 @@
 
 ### P: Se um colega junior precisasse dar manutencao nesse projeto, ele conseguiria?
 
-**R:** "Sim, por isso a nomenclatura segue um padrao claro — `brz_` pro Bronze, `slv_` pro Silver, `gld_` pro Gold. Olhando o nome do arquivo, ja sabe em qual camada esta. A DAG tem `doc_md` explicando o fluxo completo, e cada task tem docstring. O `dbt_project.yml` esta organizado por camada com tags. Os testes estao documentados nos YAMLs (`_bronze__models.yml`, `_silver__models.yml`, `_gold__models.yml`). As variaveis da DAG estao centralizadas no topo do arquivo. Um junior conseguiria navegar e entender a estrutura sem precisar de uma explicacao detalhada."
+**R:** "Sim, por isso a nomenclatura segue um padrao claro — `brz_` pro Bronze, `slv_` pro Silver, `gld_` pro Gold. Olhando o nome do arquivo, ja sabe em qual camada esta. A DAG tem `doc_md` explicando o fluxo completo, e cada task tem docstring. O `dbt_project.yml` esta organizado por camada com tags. Os testes estao documentados nos YAMLs (`_bronze__models.yml`, `_silver__models.yml`, `_gold__models.yml`). As variaveis da DAG estao centralizadas no topo do arquivo. A infraestrutura esta toda em Terraform com variaveis centralizadas — ele roda `make setup` e tem tudo funcionando. O Makefile lista todos os comandos disponiveis com `make help`. Um junior conseguiria navegar e entender a estrutura sem precisar de uma explicacao detalhada."
+
+---
+
+## BLOCO 10 - INFRAESTRUTURA E CI/CD
+
+---
+
+### P: Por que voce usou Terraform em vez de criar a infraestrutura manualmente?
+
+**R:** "Porque infraestrutura manual nao e reprodutivel e nao e rastreavel. Se eu crio um bucket e 6 datasets pelo Console do GCP, ninguem sabe exatamente o que foi configurado — versionamento, lifecycle rules, labels, nada disso fica documentado. Com Terraform, tudo esta no codigo, versionado no Git: se alguem alterar um dataset, o diff mostra exatamente o que mudou. Alem disso, qualquer pessoa pode clonar o repo e rodar `terraform apply` pra ter toda a infra pronta em minutos, sem seguir um passo-a-passo manual. A DAG do Airflow tambem ficou mais limpa — antes ela tinha tasks de `create_dataset` que misturavam responsabilidade de infra com o fluxo de dados. Agora a infra e responsabilidade do Terraform e a DAG foca so nos dados."
+
+### P: O que o Terraform provisiona no seu projeto?
+
+**R:** "Ele cria um bucket GCS com versionamento habilitado e lifecycle policies — dados raw acessados com menos frequencia sao movidos pra Nearline (mais barato) automaticamente apos 90 dias, e versoes arquivadas antigas sao deletadas apos 365 dias mantendo as 3 mais recentes. Tambem cria 6 datasets no BigQuery: 3 raw (capag, cidades, pib) e 3 da arquitetura medalha (bronze, silver, gold), todos com labels descritivos por camada e fonte. As variaveis estao centralizadas no `variables.tf` — pra usar em outro projeto GCP, basta alterar os defaults ou criar um terraform.tfvars."
+
+### P: E se alguem alterar a infra manualmente no Console? O Terraform detecta?
+
+**R:** "Sim. O Terraform mantém um state — um arquivo que registra o estado atual da infraestrutura. Quando voce roda `terraform plan`, ele compara o state com o que esta no codigo e com o que realmente existe no GCP. Se alguem alterou algo manualmente, o plan mostra a diferenca e o apply corrige, trazendo de volta pro estado desejado. Isso e o conceito de 'desired state' do Terraform — o codigo define como a infraestrutura DEVE ser, e o Terraform garante que ela esta assim."
+
+### P: Por que voce implementou CI/CD com GitHub Actions?
+
+**R:** "Pra evitar erros humanos e acelerar o feedback. O workflow de CI roda automaticamente em todo push e PR na main: instala o dbt e roda `dbt parse`, que valida a sintaxe SQL e YAML sem precisar de conexao com o BigQuery. Se alguem escrever um SQL errado, o CI pega antes do merge — nao precisa esperar rodar o pipeline no Airflow pra descobrir. O workflow de Terraform e ainda mais importante: em PR, ele roda `terraform plan` e mostra exatamente o que vai mudar na infra — o revisor pode aprovar ou rejeitar. Em merge na main, o `terraform apply` roda automaticamente, garantindo que a infra esta sempre sincronizada com o codigo."
+
+### P: O que acontece se o Terraform Apply falhar no CI/CD?
+
+**R:** "O workflow falha e o desenvolvedor e notificado via GitHub. O state do Terraform nao e corrompido porque o apply e atomico por recurso — se falhar no meio, os recursos ja criados ficam e os que faltam podem ser aplicados na proxima execucao. O plan anterior ao apply serve justamente pra evitar surpresas: como o revisor ja aprovou o que vai mudar no PR, a chance de falha no apply e baixa. Em caso extremo, o `terraform state` permite corrigir inconsistencias manualmente."
+
+### P: Por que voce criou um Makefile?
+
+**R:** "Pra simplificar o onboarding e padronizar os comandos. Em vez de um novo membro do time precisar ler o README e executar 5 comandos na ordem correta, ele roda `make setup` e tem tudo funcionando — Terraform provisionando a infra GCP e Airflow subindo com Metabase. O `make help` lista todos os comandos disponiveis com descricao. E como o Makefile sempre usa os mesmos flags e caminhos, evita erros por esquecer uma flag ou apontar pro diretorio errado."
 
 ---
 
@@ -233,7 +263,7 @@
 
 1. **Abra o projeto no VSCode durante a apresentacao.** Navegue pelos arquivos enquanto explica — mostra dominio.
 
-2. **Saiba abrir e explicar estes 7 arquivos de cor:**
+2. **Saiba abrir e explicar estes 9 arquivos de cor:**
    - `dags/capag.py` (o fluxo completo, retries, callback, chain)
    - `include/dbt/models/gold/gld_fato_risco_fiscal.sql` (a logica do score: CAPAG 70pts + PIB 30pts, comportamento adaptativo)
    - `include/dbt/models/gold/_gold__models.yml` (testes de relationships, accepted_values, accepted_range)
@@ -241,6 +271,8 @@
    - `include/dbt/models/sources/sources.yml` (freshness configuration)
    - `include/dbt/dbt_project.yml` (a configuracao por camadas: schemas, tags, materializacao)
    - `include/insights/generate_insights.py` (geracao de 6 insights com WRITE_TRUNCATE)
+   - `infra/main.tf` (Terraform: bucket GCS com lifecycle, 6 datasets BigQuery com labels)
+   - `.github/workflows/terraform.yml` (CI/CD: plan em PR, apply em merge)
 
 3. **Se nao souber responder algo, diga:** "Nao implementei isso nesse escopo, mas seria uma evolucao natural. Eu faria [explicar a abordagem]."
 

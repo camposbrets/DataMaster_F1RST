@@ -10,8 +10,10 @@
 6. [Validação de Qualidade (dbt tests)](#6-validação-de-qualidade-dbt-tests)
 7. [Insights Automáticos](#7-insights-automáticos)
 8. [Dashboards no Metabase](#8-dashboards-no-metabase)
-9. [Reprodução do Projeto](#9-reprodução-do-projeto)
-10. [Stack Tecnológica](#10-stack-tecnológica)
+9. [Infraestrutura como Código (Terraform)](#9-infraestrutura-como-código-terraform)
+10. [CI/CD (GitHub Actions)](#10-cicd-github-actions)
+11. [Reprodução do Projeto](#11-reprodução-do-projeto)
+12. [Stack Tecnológica](#12-stack-tecnológica)
 
 ---
 
@@ -73,18 +75,30 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 └──────────────┘  └──────────────┘
 ```
 
+### Infraestrutura (Terraform)
+
+Toda a infraestrutura GCP é provisionada via **Terraform** (`infra/`), incluindo:
+- Bucket GCS com versionamento e lifecycle policies (Nearline após 90 dias)
+- 6 datasets BigQuery (capag, cidades, pib, bronze, silver, gold) com labels por camada
+- Variáveis centralizadas em `variables.tf` para fácil customização
+
+### CI/CD (GitHub Actions)
+
+Dois workflows automatizados em `.github/workflows/`:
+- **CI - Pipeline de Dados** (`ci.yml`): valida sintaxe SQL (dbt parse) em todo push/PR na main
+- **Terraform - Infraestrutura** (`terraform.yml`): plan em PR, apply em merge na main
+
 ### Orquestração (Airflow)
 
 ```
 [download_capag, download_pib, download_cidades]  (paralelo, retries=2, timeout=30min)
     → [upload GCS: capag, cidades, pib]  (paralelo)
-    → [criar datasets BigQuery: capag, cidades, pib, bronze, silver, gold]
     → [GCS → BigQuery raw tables]
-    → Bronze (dbt views — DbtTaskGroup)
+    → Bronze (dbt run — DbtTaskGroup)
     → dbt test bronze (external_python no dbt_venv)
-    → Silver (dbt tables — DbtTaskGroup)
+    → Silver (dbt run — DbtTaskGroup)
     → dbt test silver
-    → Gold (dbt tables — DbtTaskGroup)
+    → Gold (dbt run — DbtTaskGroup)
     → dbt test gold
     → Geração de Insights Automáticos (salva em gold.insights_risco_fiscal)
 ```
@@ -381,7 +395,85 @@ O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e conso
 
 ---
 
-## 9. Reprodução do Projeto
+## 9. Infraestrutura como Código (Terraform)
+
+Toda a infraestrutura GCP é provisionada e versionada via **Terraform** no diretório `infra/`.
+
+### Recursos provisionados
+
+| Recurso | Descrição |
+| --- | --- |
+| `google_storage_bucket.raw_data` | Bucket GCS (`bruno_dm`) com versionamento habilitado e lifecycle policies |
+| `google_bigquery_dataset.capag` | Dataset raw para dados CAPAG |
+| `google_bigquery_dataset.cidades` | Dataset raw para cadastro de municípios |
+| `google_bigquery_dataset.pib` | Dataset raw para PIB Municipal |
+| `google_bigquery_dataset.bronze` | Dataset Bronze — views espelhando dados brutos |
+| `google_bigquery_dataset.silver` | Dataset Silver — dados limpos e tipados |
+| `google_bigquery_dataset.gold` | Dataset Gold — modelos dimensionais e reports |
+
+### Lifecycle policies (GCS)
+
+- **Nearline após 90 dias**: dados raw acessados com menos frequência são movidos automaticamente para storage mais barato
+- **Deleção após 365 dias**: versões arquivadas antigas são removidas (mantém as 3 mais recentes)
+
+### Estrutura dos arquivos
+
+```
+infra/
+├── main.tf          # Provider GCP, bucket GCS, datasets BigQuery
+├── variables.tf     # Variáveis centralizadas (project_id, region, bucket_name)
+└── outputs.tf       # Outputs após apply (URLs, dataset IDs)
+```
+
+### Comandos úteis
+
+```bash
+make infra-init     # terraform init (primeira vez)
+make infra-plan     # terraform plan (mostra o que vai mudar)
+make infra-apply    # terraform apply (aplica no GCP)
+```
+
+---
+
+## 10. CI/CD (GitHub Actions)
+
+O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflows/`:
+
+### Workflow 1: CI - Pipeline de Dados (`ci.yml`)
+
+**Dispara em:** push e PR na `main` (ignora `infra/`, `*.md`, `imagens/`)
+
+| Step | O que faz |
+| --- | --- |
+| Checkout | Clona o repositório |
+| Setup Python 3.11 | Instala Python |
+| Instalar dbt-bigquery | Instala dbt 1.5.3 |
+| dbt deps | Instala dbt packages (dbt_utils) |
+| dbt parse | Valida sintaxe SQL e YAML sem conexão com BigQuery |
+
+### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
+
+**Dispara em:** push e PR na `main` (apenas quando `infra/**` muda)
+
+| Step | O que faz |
+| --- | --- |
+| Setup Terraform 1.7.0 | Instala Terraform |
+| Autenticar no GCP | Usa `secrets.GCP_SA_KEY` |
+| terraform init | Inicializa providers |
+| terraform fmt -check | Verifica formatação |
+| terraform validate | Valida configuração |
+| terraform plan | **Em PR**: mostra o que vai mudar (sem aplicar) |
+| terraform apply | **Em merge na main**: aplica as mudanças no GCP |
+
+### Secrets necessários
+
+| Secret | Descrição |
+| --- | --- |
+| `GCP_SA_KEY` | JSON da Service Account com roles BigQuery Admin + Storage Admin |
+
+---
+
+## 11. Reprodução do Projeto
 
 ### Pré-requisitos
 - 16GB RAM
@@ -389,17 +481,31 @@ O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e conso
 - Astro CLI (`astro version`)
 - Conta Google Cloud (com BigQuery e GCS habilitados)
 
-### Passo 1: Iniciar o ambiente
+### Passo 1: Provisionar infraestrutura (Terraform)
+
+```bash
+# Primeira vez: inicializa e aplica
+make infra-init
+make infra-apply
+
+# Ou manualmente:
+cd infra && terraform init && terraform apply
+```
+
+Isso cria o bucket GCS e os 6 datasets no BigQuery automaticamente.
+
+### Passo 2: Iniciar o ambiente
 
 ```bash
 # Abrir Docker Desktop
 # No terminal, na pasta do projeto:
 astro dev start
+# Ou: make airflow-start
 ```
 
 Isso inicia Airflow (http://localhost:8080) e Metabase (http://localhost:3000).
 
-### Passo 2: Configurar Google Cloud
+### Passo 3: Configurar Google Cloud
 
 1. Criar projeto no GCP (ou usar existente)
 2. Criar bucket no GCS (nome padrão: `bruno_dm`)
@@ -408,7 +514,7 @@ Isso inicia Airflow (http://localhost:8080) e Metabase (http://localhost:3000).
    - Storage Admin
 4. Gerar chave JSON e salvar em `include/gcp/service_account.json`
 
-### Passo 3: Ajustar Project ID
+### Passo 4: Ajustar Project ID
 
 Se o Project ID for diferente de `projeto-data-master`, alterar em:
 - `include/dbt/profiles.yml` → campo `project`
@@ -416,8 +522,9 @@ Se o Project ID for diferente de `projeto-data-master`, alterar em:
 
 Se o bucket for diferente de `bruno_dm`, alterar em:
 - `dags/capag.py` → variável `GCS_BUCKET` no topo do arquivo
+- `infra/variables.tf` → defaults de `project_id` e `gcs_bucket_name`
 
-### Passo 4: Configurar Airflow
+### Passo 5: Configurar Airflow
 
 1. Acessar http://localhost:8080 (user: admin, pass: admin)
 2. Ir em Admin → Connections
@@ -426,7 +533,7 @@ Se o bucket for diferente de `bruno_dm`, alterar em:
    - **Connection Type:** Google Cloud
    - **Keyfile Path:** /usr/local/airflow/include/gcp/service_account.json
 
-### Passo 5: Executar a DAG
+### Passo 6: Executar a DAG
 
 1. Na tela principal do Airflow, ativar a DAG `capag`
 2. Clicar em "Trigger DAG" para executar
@@ -442,7 +549,7 @@ download_pib ─────→ upload_pib ────┘
 Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 tables) → dbt test → Insights
 ```
 
-### Passo 6: Configurar Metabase
+### Passo 7: Configurar Metabase
 
 1. Acessar http://localhost:3000
 2. Fazer cadastro inicial
@@ -451,7 +558,7 @@ Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 ta
 
 ---
 
-## 10. Stack Tecnológica
+## 12. Stack Tecnológica
 
 | Tecnologia | Versão | Uso |
 | --- | --- | --- |
@@ -463,11 +570,14 @@ Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 ta
 | **BigQuery** | — | Data warehouse (datasets: capag, cidades, pib, bronze, silver, gold) |
 | **dbt-bigquery** | 1.5.3 | Transformação (Arquitetura Medalhão) + testes de qualidade |
 | **dbt-utils** | 1.1.1 | Macros auxiliares (generate_surrogate_key, accepted_range) |
+| **Terraform** | 1.7.0 | Infraestrutura como Código (GCS bucket, BigQuery datasets) |
+| **GitHub Actions** | — | CI/CD (validação dbt + deploy Terraform) |
 | **Metabase** | 0.50.24 | Dashboards interativos |
 | **Python** | — | Download automático, geração de insights |
 | **openpyxl** | — | Leitura de XLSX (CAPAG) |
 | **requests** | — | Chamadas HTTP às APIs (dados.gov.br, SIDRA, IBGE) |
 | **google-cloud-storage** | — | Upload de CSVs e verificação incremental no GCS |
+| **Make** | — | Atalhos para comandos do projeto (`make infra-plan`, `make airflow-start`) |
 
 ### Estrutura do Projeto
 
@@ -501,8 +611,16 @@ DataMaster_F1RST/
 │   │   └── generate_insights.py           # Agente de insights automáticos
 │   └── gcp/
 │       └── service_account.json           # Credenciais GCP
+├── infra/
+│   ├── main.tf                            # Provider GCP, bucket GCS, datasets BigQuery
+│   ├── variables.tf                       # Variáveis centralizadas (project_id, region, bucket)
+│   └── outputs.tf                         # Outputs (URLs, dataset IDs)
+├── .github/workflows/
+│   ├── ci.yml                             # CI: validação dbt (parse + deps)
+│   └── terraform.yml                      # CD: Terraform plan (PR) / apply (merge)
 ├── Dockerfile                             # Astro Runtime 8.8.0 + dbt_venv
 ├── docker-compose.override.yml            # Metabase 0.50.24 (porta 3000)
+├── Makefile                               # Atalhos: make infra-plan, make airflow-start, etc.
 ├── requirements.txt                       # Dependências Python
 └── README.md                              # Este arquivo
 ```

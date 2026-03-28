@@ -23,6 +23,9 @@ O projeto original entregava um pipeline funcional, porem com limitacoes que nao
 | **Insights automaticos** | Nao existia | 6 tipos de insights com narrativa automatica |
 | **Download de dados** | Manual (CSV estatico) | Automatizado via API com logica incremental (baixa apenas anos novos) |
 | **Qualidade de dados** | SODA (ferramenta externa) | dbt tests nativos integrados ao pipeline |
+| **Infraestrutura** | Manual (criacao de datasets/bucket via Console GCP) | Terraform (IaC) — bucket GCS + 6 datasets BigQuery provisionados automaticamente |
+| **CI/CD** | Nao existia | GitHub Actions — validacao dbt (ci.yml) + deploy Terraform (terraform.yml) |
+| **Automacao de comandos** | Nao existia | Makefile com atalhos (make infra-plan, make airflow-start, etc.) |
 
 ---
 
@@ -341,9 +344,100 @@ docker-compose.override.yml -> Metabase 0.50.24
 include/soda/ (arquivos) -> Qualidade migrada para dbt tests nativos
 ```
 
+### Arquivos NOVOS (Infraestrutura e CI/CD)
+```
+infra/main.tf                -> Provider GCP, bucket GCS, 6 datasets BigQuery
+infra/variables.tf           -> Variaveis centralizadas (project_id, region, bucket)
+infra/outputs.tf             -> Outputs apos apply (URLs, dataset IDs)
+.github/workflows/ci.yml     -> CI: validacao dbt (parse + deps) em push/PR
+.github/workflows/terraform.yml -> CD: Terraform plan (PR) + apply (merge na main)
+Makefile                     -> Atalhos: make setup, make infra-plan, make airflow-start
+```
+
 ---
 
-## 13. COMPETENCIAS TECNICAS DEMONSTRADAS
+## 13. INFRAESTRUTURA COMO CODIGO (TERRAFORM)
+
+### O que era
+Toda a infraestrutura GCP era criada manualmente via Console: o bucket GCS e os datasets BigQuery precisavam ser criados a mao antes de executar o pipeline. A DAG do Airflow tinha tasks dedicadas (`create_dataset`) para criar datasets que ja deveriam existir — misturando responsabilidades de infra com o fluxo de dados.
+
+### O que foi feito
+Migrei toda a infraestrutura para **Terraform** no diretorio `infra/`:
+
+| Recurso | Descricao | Detalhes |
+|---|---|---|
+| `google_storage_bucket.raw_data` | Bucket GCS para dados raw | Versionamento habilitado, lifecycle Nearline apos 90 dias, delecao de versoes antigas apos 365 dias |
+| `google_bigquery_dataset` (x6) | Datasets por responsabilidade | capag, cidades, pib (raw) + bronze, silver, gold (medallion) — com labels por camada e fonte |
+| `variables.tf` | Variaveis centralizadas | project_id, region, location, gcs_bucket_name — facilita customizacao sem mexer no codigo |
+| `outputs.tf` | Informacoes pos-deploy | URLs do bucket, IDs dos datasets criados |
+
+### Por que
+- **Reprodutibilidade**: qualquer pessoa pode clonar o repo e rodar `terraform apply` para ter toda a infra pronta. Nao precisa seguir um passo-a-passo manual no Console GCP.
+- **Versionamento**: mudancas na infra sao rastreadas no Git. Se alguem alterar um dataset, o diff mostra exatamente o que mudou.
+- **Separacao de responsabilidades**: a DAG nao precisa mais criar datasets — ela foca apenas no fluxo de dados. A infra e responsabilidade do Terraform.
+- **Lifecycle policies**: o bucket GCS tem versionamento (recupera arquivos sobrescritos acidentalmente) e lifecycle rules que movem dados antigos para Nearline (mais barato) automaticamente.
+- **Padrao de mercado**: Infrastructure as Code (IaC) com Terraform e pratica obrigatoria em times de dados senior. Uma banca avaliadora reconhece isso imediatamente.
+
+---
+
+## 14. CI/CD COM GITHUB ACTIONS
+
+### O que era
+Nao existia CI/CD. Todo deploy era manual — o desenvolvedor precisava rodar comandos localmente e acompanhar erros manualmente.
+
+### O que foi feito
+Criei dois workflows automatizados em `.github/workflows/`:
+
+**1. CI - Pipeline de Dados (`ci.yml`):**
+- Dispara em todo push e PR na `main` (ignora `infra/`, `*.md`, `imagens/`)
+- Instala Python 3.11 + dbt-bigquery 1.5.3
+- Roda `dbt deps` (instala packages) + `dbt parse` (valida sintaxe SQL/YAML)
+- Detecta erros de SQL antes de chegar em producao
+
+**2. Terraform - Infraestrutura (`terraform.yml`):**
+- Dispara apenas quando arquivos em `infra/` mudam
+- **Em Pull Request**: roda `terraform plan` — mostra o que vai mudar sem aplicar
+- **Em merge na main**: roda `terraform apply` — aplica as mudancas no GCP automaticamente
+- Inclui `terraform fmt -check` e `terraform validate` como verificacoes de qualidade
+
+### Por que
+- **Prevencao de erros**: o `dbt parse` no CI pega erros de sintaxe SQL e YAML antes do merge. Sem CI, esses erros so apareceriam quando alguem rodasse o pipeline no Airflow.
+- **Deploy seguro da infra**: o `terraform plan` no PR mostra exatamente o que vai mudar — o revisor pode aprovar ou rejeitar antes de aplicar. O `apply` automatico no merge garante que a infra esta sempre em sincronia com o codigo.
+- **Padrao de mercado**: CI/CD e pratica fundamental em engenharia de software e dados. Demonstra maturidade no ciclo de vida do projeto.
+- **Feedback rapido**: desenvolvedores recebem feedback em minutos sobre erros, em vez de descobrir durante a execucao do pipeline.
+
+---
+
+## 15. MAKEFILE E AUTOMACAO DE COMANDOS
+
+### O que era
+Nao existia. Cada comando (terraform init, astro dev start, dbt compile) precisava ser digitado manualmente.
+
+### O que foi feito
+Criei um `Makefile` com atalhos organizados por categoria:
+
+| Comando | O que faz |
+|---|---|---|
+| `make setup` | Setup completo: terraform apply + astro dev start |
+| `make infra-init` | terraform init (primeira vez) |
+| `make infra-plan` | terraform plan (mostra mudancas) |
+| `make infra-apply` | terraform apply (aplica no GCP) |
+| `make infra-destroy` | terraform destroy (remove tudo — cuidado!) |
+| `make infra-fmt` | terraform fmt (formata arquivos) |
+| `make airflow-start` | astro dev start |
+| `make airflow-stop` | astro dev stop |
+| `make airflow-restart` | astro dev restart |
+| `make dbt-compile` | dbt compile (valida SQL) |
+| `make dbt-docs` | dbt docs generate + serve |
+
+### Por que
+- **Onboarding simplificado**: um novo membro do time roda `make setup` e tem tudo funcionando. Sem Makefile, precisaria ler o README e executar 5+ comandos na ordem correta.
+- **Padronizacao**: todos no time usam os mesmos comandos, evitando erros por flags esquecidas ou caminhos errados.
+- **Documentacao executavel**: `make help` lista todos os comandos disponiveis com descricao — e uma documentacao que nunca fica desatualizada.
+
+---
+
+## 16. COMPETENCIAS TECNICAS DEMONSTRADAS
 
 As melhorias evidenciam dominio nas seguintes areas de um **Engenheiro de Dados Senior**:
 
@@ -357,7 +451,9 @@ As melhorias evidenciam dominio nas seguintes areas de um **Engenheiro de Dados 
 | **Integracao de dados** | 3 fontes (APIs governamentais: dados.gov.br, SIDRA/IBGE, IBGE Localidades), download incremental com GCS fallback |
 | **Performance** | Particionamento RANGE e clustering no BigQuery, reports pre-calculados |
 | **Automacao** | Download incremental, insights automaticos com narrativa, pipeline end-to-end |
-| **DevOps/Infra** | Docker otimizado (Astro Runtime + dbt_venv), Metabase via docker-compose, reducao de dependencias |
+| **DevOps/Infra** | Docker otimizado (Astro Runtime + dbt_venv), Metabase via docker-compose, Terraform (IaC) para GCS + BigQuery, CI/CD com GitHub Actions |
 | **Data Storytelling** | 6 tipos de insights automaticos com narrativas acionaveis |
-| **Boas praticas** | Nomenclatura padronizada (prefixos brz/slv/gld), documentacao (doc_md, docstrings), tags por camada, variaveis centralizadas |
+| **Boas praticas** | Nomenclatura padronizada (prefixos brz/slv/gld), documentacao (doc_md, docstrings), tags por camada, variaveis centralizadas, Makefile |
 | **Pensamento analitico** | Score de risco composto adaptativo (0-100), classificacao de risco, faixa populacional, tendencias YoY |
+| **Infrastructure as Code** | Terraform provisionando bucket GCS (com lifecycle policies) e 6 datasets BigQuery com labels e variaveis centralizadas |
+| **CI/CD** | GitHub Actions: validacao dbt (ci.yml) em push/PR + deploy Terraform automatico (terraform.yml) em merge na main |
