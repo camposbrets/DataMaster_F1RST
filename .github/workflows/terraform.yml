@@ -1,0 +1,63 @@
+# =============================================
+# CI/CD - Terraform (Infraestrutura como Codigo)
+# =============================================
+# Dispara apenas quando arquivos em infra/ mudam.
+# Em Pull Request: mostra o plano (o que vai mudar).
+# Em merge na main: aplica as mudancas no GCP.
+# =============================================
+
+name: "Terraform - Infraestrutura"
+
+on:
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+  pull_request:
+    branches: [main]
+    paths: ["infra/**"]
+
+env:
+  TF_VERSION: "1.7.0"
+  WORKING_DIR: infra
+
+jobs:
+  terraform:
+    name: "Terraform Plan & Apply"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Autenticar no GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Em Pull Request: mostra o que vai mudar (sem aplicar)
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+
+      # Em merge na main: aplica de fato
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false

@@ -1,0 +1,24 @@
+.git
+.env
+.DS_Store
+airflow_settings.yaml
+__pycache__/
+astro
+.venv
+airflow-webserver.pid
+webserver_config.py
+airflow.cfg
+airflow.db
+include/gcp/service_account.json
+include/metabase-data/
+
+# dbt artifacts
+include/dbt/logs/
+include/dbt/target/
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/.terraform.lock.hcl
+infra/terraform.tfvars

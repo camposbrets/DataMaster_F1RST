@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: brz_capag_brasil
+    description: "Bronze: dados brutos CAPAG espelhados do BigQuery raw"
+    columns:
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: instituicao
+        tests:
+          - not_null
+      - name: ano_base
+        tests:
+          - not_null
+
+  - name: brz_cidades_brasil
+    description: "Bronze: cadastro de cidades espelhado do BigQuery raw"
+    columns:
+      - name: codigo
+        tests:
+          - not_null
+
+  - name: brz_pib_municipal
+    description: "Bronze: PIB municipal espelhado do BigQuery raw"
+    columns:
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: ano
+        tests:
+          - not_null

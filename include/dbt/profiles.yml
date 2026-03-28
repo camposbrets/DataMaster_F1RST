@@ -1,0 +1,12 @@
+capag:
+ target: dev
+ outputs:
+  dev:
+    type: bigquery
+    method: service-account
+    keyfile: /usr/local/airflow/include/gcp/service_account.json
+    project: projeto-data-master
+    dataset: capag
+    threads: 1
+    timeout_seconds: 800
+    location: US

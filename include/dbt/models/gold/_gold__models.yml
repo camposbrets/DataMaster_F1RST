@@ -1,0 +1,176 @@
+version: 2
+
+models:
+  # =============================================
+  # DIMENSOES
+  # =============================================
+
+  - name: gld_dim_instituicoes
+    description: "Dimensao de municipios brasileiros com nome e codigo IBGE"
+    columns:
+      - name: cod_ibge
+        description: "Codigo IBGE do municipio (chave primaria)"
+        tests:
+          - unique
+          - not_null
+      - name: nome_municipio
+        description: "Nome oficial do municipio"
+      - name: uf
+        description: "Sigla da Unidade Federativa (ex: SP, RJ, MG)"
+
+  - name: gld_dim_uf
+    description: "Dimensao de Unidades Federativas"
+    columns:
+      - name: uf_id
+        description: "Chave surrogate da UF"
+        tests:
+          - unique
+          - not_null
+      - name: uf
+        description: "Sigla da UF (27 estados + DF)"
+        tests:
+          - unique
+          - not_null
+
+  - name: gld_dim_classificacao_capag
+    description: "Dimensao de classificacoes CAPAG com descricao por extenso"
+    columns:
+      - name: classificacao_capag_id
+        description: "Chave surrogate da classificacao"
+        tests:
+          - unique
+          - not_null
+      - name: classificacao_capag
+        description: "Classificacao CAPAG (A, B, C ou D)"
+        tests:
+          - accepted_values:
+              values: ['A', 'B', 'C', 'D']
+      - name: descricao_classificacao
+        description: "Descricao por extenso da classificacao (ex: Boa capacidade de pagamento)"
+
+  # =============================================
+  # FATOS
+  # =============================================
+
+  - name: gld_fato_indicadores_capag
+    description: >
+      Fato de indicadores CAPAG por municipio e ano.
+      Particionado por ano_base, clusterizado por uf_id e classificacao_capag_id.
+    columns:
+      - name: indicador_id
+        description: "Chave surrogate: hash(cod_ibge + ano_base)"
+        tests:
+          - unique
+          - not_null
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: uf_id
+        description: "FK para gld_dim_uf"
+        tests:
+          - relationships:
+              to: ref('gld_dim_uf')
+              field: uf_id
+              config:
+                severity: warn
+      - name: classificacao_capag_id
+        description: "FK para gld_dim_classificacao_capag"
+        tests:
+          - relationships:
+              to: ref('gld_dim_classificacao_capag')
+              field: classificacao_capag_id
+              config:
+                severity: warn
+
+  - name: gld_fato_pib_municipal
+    description: >
+      Fato de PIB municipal por ano com taxa de crescimento YoY.
+      Particionado por ano, clusterizado por uf_id.
+    columns:
+      - name: pib_id
+        description: "Chave surrogate do registro de PIB"
+        tests:
+          - unique
+          - not_null
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: uf_id
+        description: "FK para gld_dim_uf"
+        tests:
+          - relationships:
+              to: ref('gld_dim_uf')
+              field: uf_id
+              config:
+                severity: warn
+      - name: pib
+        description: "PIB total do municipio no ano (em milhares de reais)"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+      - name: taxa_crescimento_pib
+        description: "Variacao percentual do PIB em relacao ao ano anterior"
+
+  - name: gld_fato_risco_fiscal
+    description: >
+      Modelo principal: cruzamento CAPAG x PIB com score de risco fiscal composto (0-100).
+      Classificacao de risco: BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36).
+      Particionado por ano_base, clusterizado por classificacao_risco e uf.
+    columns:
+      - name: risco_fiscal_id
+        description: "Chave surrogate: hash(cod_ibge + ano_base)"
+        tests:
+          - unique
+          - not_null
+      - name: cod_ibge
+        tests:
+          - not_null
+      - name: classificacao_capag_id
+        description: "FK para gld_dim_classificacao_capag"
+        tests:
+          - relationships:
+              to: ref('gld_dim_classificacao_capag')
+              field: classificacao_capag_id
+              config:
+                severity: warn
+      - name: score_risco_fiscal
+        description: "Score composto de 0 a 100 pontos. NULL quando nao ha dados CAPAG nem PIB."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+      - name: classificacao_risco
+        description: "BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36)"
+        tests:
+          - accepted_values:
+              values: ['BAIXO', 'MODERADO', 'ELEVADO', 'CRITICO', 'INDETERMINADO']
+              config:
+                severity: warn
+
+  # =============================================
+  # REPORTS (consumo pelo Metabase)
+  # =============================================
+
+  - name: gld_report_risco_fiscal_municipal
+    description: "Report: painel principal de risco fiscal municipal para Metabase"
+
+  - name: gld_report_tendencia_anual
+    description: "Report: evolucao ano a ano do score com indicacao de tendencia"
+    columns:
+      - name: tendencia
+        description: "Direcao do score: MELHORIA, PIORA, ESTAVEL ou SEM_HISTORICO"
+        tests:
+          - accepted_values:
+              values: ['MELHORIA', 'PIORA', 'ESTAVEL', 'SEM_HISTORICO']
+              config:
+                severity: warn
+
+  - name: gld_report_capag_vs_pib
+    description: "Report: correlacao entre indicadores CAPAG e PIB municipal"
+
+  - name: gld_report_agregacao_estadual
+    description: "Report: visao consolidada por estado com percentual de risco alto"

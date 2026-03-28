@@ -1,0 +1,9 @@
+# Terraform state contem informacoes sensiveis (IDs, emails, etc)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Valores de variaveis que podem conter secrets
+terraform.tfvars
+*.auto.tfvars
