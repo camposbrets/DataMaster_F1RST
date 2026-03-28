@@ -45,6 +45,18 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 ## 2. Arquitetura de Solução
 
 ```
+                    ┌──────────────────────────────────────┐
+                    │        GitHub Actions (CI/CD)         │
+                    │  ci.yml: dbt + Docker + Python lint   │
+                    │  terraform.yml: plan (PR) / apply     │
+                    └──────────────────┬───────────────────┘
+                                       │
+┌──────────────────────────────────────────────────────────────┐
+│                  Terraform (infra/)                           │
+│   Provisiona: GCS bucket + 6 datasets BigQuery + lifecycle   │
+└──────────────────────────┬───────────────────────────────────┘
+                           │ provisiona
+                           ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
 │  dados.gov.br   │   │  IBGE / SIDRA   │   │ IBGE Localidades│
 │  (CAPAG XLSX)   │   │  (PIB Municipal)│   │   (Municípios)  │
@@ -261,7 +273,7 @@ O score combina dois componentes independentes. Quando apenas um componente est�
    - `upload_cidades_to_gcs` → gs://bruno_dm/raw/cidades.csv
    - `upload_pib_to_gcs` → gs://bruno_dm/raw/pib_municipal.csv
 
-3. **Criação de 6 datasets** no BigQuery: capag, cidades, pib, bronze, silver, gold
+3. **Verificação de datasets** no BigQuery: capag, cidades, pib, bronze, silver, gold (já provisionados pelo Terraform — a DAG apenas garante que existem como fallback idempotente)
 
 4. **Carga raw** (GCS → BigQuery, `if_exists='replace'`)
    - capag_brasil, cidades_brasil, pib_municipal
@@ -397,6 +409,19 @@ O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e conso
 
 ## 9. Infraestrutura como Código (Terraform)
 
+### Por que Terraform?
+
+Antes do Terraform, o bucket GCS e os datasets BigQuery eram criados **manualmente** pelo console do GCP ou diretamente pela DAG no Airflow. Isso gerava problemas:
+
+| Problema (antes) | Solução (Terraform) |
+| --- | --- |
+| Infra criada manualmente, sem registro do que foi feito | Código versionado no Git — toda mudança é rastreável |
+| Impossível recriar o ambiente de forma consistente | `terraform apply` recria tudo identicamente em qualquer projeto GCP |
+| Risco de esquecer recursos ao migrar de projeto | Todos os recursos declarados em um único lugar (`main.tf`) |
+| Sem lifecycle policies no GCS (custo desnecessário) | Nearline automático após 90 dias + deleção de versões antigas |
+| Datasets criados sem labels ou padrão | Labels padronizados por camada (`raw`, `bronze`, `silver`, `gold`) |
+| Mudanças de infra sem revisão | CI/CD: `terraform plan` em PRs, `apply` apenas em merge na main |
+
 Toda a infraestrutura GCP é provisionada e versionada via **Terraform** no diretório `infra/`.
 
 ### Recursos provisionados
@@ -437,12 +462,22 @@ make infra-apply    # terraform apply (aplica no GCP)
 
 ## 10. CI/CD (GitHub Actions)
 
+### Por que CI/CD?
+
+Sem automação, erros em SQL, Python ou infraestrutura só seriam detectados **em produção** (ao rodar a DAG ou ao aplicar Terraform manualmente). O CI/CD garante:
+
+- **Detecção precoce**: sintaxe SQL quebrada, lint de Python e build Docker são validados a cada push, antes de chegar ao Airflow
+- **Revisão de infra**: mudanças em Terraform geram `plan` automático no PR, permitindo revisão antes do apply
+- **Deploy seguro**: Terraform só aplica mudanças no GCP após merge na main (nunca direto de uma branch)
+- **Padronização**: todo código passa pelos mesmos checks, independente de quem fez o commit
+
 O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflows/`:
 
 ### Workflow 1: CI - Pipeline de Dados (`ci.yml`)
 
 **Dispara em:** push e PR na `main` (ignora `infra/`, `*.md`, `imagens/`)
 
+**Job 1: dbt compile & lint**
 | Step | O que faz |
 | --- | --- |
 | Checkout | Clona o repositório |
@@ -450,6 +485,20 @@ O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflo
 | Instalar dbt-bigquery | Instala dbt 1.5.3 |
 | dbt deps | Instala dbt packages (dbt_utils) |
 | dbt parse | Valida sintaxe SQL e YAML sem conexão com BigQuery |
+
+**Job 2: Docker build**
+| Step | O que faz |
+| --- | --- |
+| Checkout | Clona o repositório |
+| Docker build | Builda a imagem Docker para validar que o Dockerfile compila sem erros |
+
+**Job 3: Python lint**
+| Step | O que faz |
+| --- | --- |
+| Checkout | Clona o repositório |
+| Setup Python 3.11 | Instala Python |
+| Instalar flake8 | Instala o linter |
+| flake8 | Valida estilo e erros nos scripts de download, insights e DAGs |
 
 ### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
 
@@ -508,11 +557,12 @@ Isso inicia Airflow (http://localhost:8080) e Metabase (http://localhost:3000).
 ### Passo 3: Configurar Google Cloud
 
 1. Criar projeto no GCP (ou usar existente)
-2. Criar bucket no GCS (nome padrão: `bruno_dm`)
-3. Criar Service Account com roles:
+2. Criar Service Account com roles:
    - BigQuery Admin
    - Storage Admin
-4. Gerar chave JSON e salvar em `include/gcp/service_account.json`
+3. Gerar chave JSON e salvar em `include/gcp/service_account.json`
+
+> **Nota:** O bucket GCS e os 6 datasets BigQuery já foram criados automaticamente pelo Terraform no Passo 1. Não é necessário criá-los manualmente.
 
 ### Passo 4: Ajustar Project ID
 
@@ -540,9 +590,11 @@ Se o bucket for diferente de `bruno_dm`, alterar em:
 3. Acompanhar a execução na view Graph:
 
 ```
+[Terraform já provisionou: GCS bucket + 6 datasets BigQuery]
+                            ↓
 download_capag ───→ upload_capag ──┐
                                    │
-download_cidades ─→ upload_cidades ├──→ datasets (6) ──→ raw loads (3)
+download_cidades ─→ upload_cidades ├──→ raw loads (3)
                                    │
 download_pib ─────→ upload_pib ────┘
                             ↓
