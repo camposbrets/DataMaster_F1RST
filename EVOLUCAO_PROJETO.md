@@ -202,6 +202,31 @@ Criei 3 scripts de download automatico + 1 modulo utilitario, executados como ta
 | `download_cidades.py` | API Localidades IBGE | Cadastro de municipios, validacao (>5000 municipios, 27 UFs) |
 | `gcs_utils.py` | Google Cloud Storage | Verifica anos existentes no GCS antes de baixar, evita reprocessamento |
 
+### Como funciona cada download (nao e scraping)
+
+Nenhum dos downloads usa web scraping. Todos consomem **APIs REST publicas oficiais** com `requests`, sem parsing de HTML, sem Selenium, sem BeautifulSoup:
+
+**CAPAG (`download_capag.py`):**
+1. Faz `GET` na API publica do dados.gov.br (`https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios`) que retorna JSON com a lista de recursos (arquivos) disponiveis
+2. Filtra apenas recursos no formato XLSX (ignora metadados), extrai o ano do titulo e seleciona o arquivo mais recente por ano (quando ha multiplas versoes — o Tesouro publica revisoes)
+3. Baixa cada XLSX via `requests.get(link)` e le com `pandas.read_excel` + engine `openpyxl`. Se o pandas falhar (XLSX com dimensoes incorretas — problema real dos arquivos do Tesouro), faz fallback lendo diretamente com `openpyxl.load_workbook`
+4. Normaliza colunas usando `COLUMN_MAP` (dicionario com 20+ variacoes de nomes, porque o Tesouro muda os nomes entre anos: `Classificacao_CAPAG`, `CAPAG_Oficial`, `CAPAG_2022`, etc.)
+5. Consolida todos os DataFrames em um unico CSV padronizado
+
+**PIB Municipal (`download_pib.py`):**
+1. Faz `GET` na API SIDRA do IBGE (`https://apisidra.ibge.gov.br/values/t/5938/n6/all/v/37/p/{anos}/h/n`) — uma unica chamada com todos os anos agrupados na URL
+2. A API retorna JSON com os valores do PIB (variavel 37 = PIB a precos correntes em Mil Reais) para todos os municipios
+3. Usa `requests.Session` com retry strategy (3 tentativas, backoff exponencial, retry em status 429/500/502/503/504) para lidar com instabilidade da API
+4. Se a chamada em lote falhar (ex: HTTP 400), faz fallback automatico baixando ano a ano
+5. Filtra valores invalidos da API (`...`, `-`, `X` = marcadores de dado ausente do IBGE)
+6. Extrai a UF dos 2 primeiros digitos do cod_ibge via mapeamento (`UF_MAP`)
+
+**Cidades (`download_cidades.py`):**
+1. Faz `GET` na API de Localidades do IBGE (`https://servicodados.ibge.gov.br/api/v1/localidades/municipios`) que retorna JSON com todos os municipios
+2. Extrai `id`, `nome` e navega no JSON aninhado para obter a sigla da UF (caminho: `municipio.microrregiao.mesorregiao.UF.sigla`)
+3. Valida o resultado: se retornar menos de 5.000 municipios ou diferente de 27 UFs, levanta erro (protecao contra API com resposta parcial)
+4. Este download nao e incremental porque o cadastro de municipios e relativamente estatico
+
 **Logica incremental (CAPAG e PIB):**
 1. Antes de baixar, o script verifica quais anos ja existem — primeiro tenta ler do GCS (`gcs_utils.read_csv_years_from_gcs`), se falhar usa fallback local
 2. Compara com os anos disponiveis na API
@@ -230,13 +255,13 @@ upload_cidades -> create_dataset -> load_to_bq -----^
 
 ### O que foi feito (~400 linhas)
 ```
-download_capag  -> upload_gcs -> create_dataset -> load_bq --|
-download_pib   -> upload_gcs -> create_dataset -> load_bq ---|  (retries=2, timeout=30min)
-download_cidades -> upload_cidades -> create_dataset -> load_bq-|
-                                                              v
-                                          [create_bronze/silver/gold datasets]
-                                                              v
-                                                         dbt_bronze (DbtTaskGroup)
+[Terraform ja provisionou: GCS bucket + 6 datasets BigQuery]
+                            |
+download_capag  -> upload_gcs -> load_bq --|
+download_pib   -> upload_gcs -> load_bq ---|  (retries=2, timeout=30min)
+download_cidades -> upload_gcs -> load_bq -|
+                                           v
+                                      dbt_bronze (DbtTaskGroup)
                                                               |
                                                          dbt_test_bronze (external_python)
                                                               |
@@ -384,6 +409,13 @@ Migrei toda a infraestrutura para **Terraform** no diretorio `infra/`:
 
 ### O que era
 Nao existia CI/CD. Todo deploy era manual — o desenvolvedor precisava rodar comandos localmente e acompanhar erros manualmente.
+
+### Por que CI/CD num projeto solo?
+Mesmo o projeto sendo desenvolvido por um unico dev, o CI/CD demonstra **maturidade de engenharia** — em producao, ninguem faz deploy manual. Mas alem de demonstrar, ele resolve problemas reais mesmo sozinho:
+- Evita push de SQL quebrado na main (ja aconteceu: alterar um modelo e esquecer de validar)
+- Garante que o Dockerfile continua buildando apos cada mudanca de dependencia
+- O `terraform plan` no PR serve como checklist automatico: antes de aplicar, voce ve exatamente o que vai mudar
+- Se amanha outro engenheiro entrar no projeto, a main ja esta protegida por checks automaticos
 
 ### O que foi feito
 Criei dois workflows automatizados em `.github/workflows/`:

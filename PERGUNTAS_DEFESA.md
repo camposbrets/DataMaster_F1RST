@@ -68,7 +68,7 @@
 
 ### P: Me explica o fluxo da sua DAG.
 
-**R:** "A DAG tem 3 grandes fases. Primeiro, a ingestao: tres tasks Python baixam os dados em paralelo — CAPAG do dados.gov.br, PIB da API SIDRA do IBGE, e cadastro de municipios da API de Localidades do IBGE. Os downloads sao incrementais — antes de baixar, verificam quais anos ja existem no GCS e so baixam anos novos. Depois, os arquivos sao enviados pro Google Cloud Storage e de la carregados no BigQuery como tabelas brutas. A segunda fase e o dbt, que roda em 3 etapas separadas encadeadas com `chain()` — bronze, silver e gold — cada uma com seus testes. Se o Silver falhar nos testes, o Gold nem executa. A terceira fase e a geracao de insights, que le as tabelas gold e gera 6 tipos de narrativas automaticas, salvando tudo na tabela `gold.insights_risco_fiscal`."
+**R:** "A DAG tem 3 grandes fases, mas antes de tudo, a infraestrutura (bucket GCS e 6 datasets BigQuery) ja foi provisionada pelo Terraform — a DAG nao precisa mais criar datasets. Primeiro, a ingestao: tres tasks Python baixam os dados em paralelo via APIs REST (nao e scraping) — CAPAG do dados.gov.br, PIB da API SIDRA do IBGE, e cadastro de municipios da API de Localidades do IBGE. Os downloads sao incrementais — antes de baixar, verificam quais anos ja existem no GCS e so baixam anos novos. Depois, os arquivos sao enviados pro Google Cloud Storage e de la carregados no BigQuery como tabelas brutas. A segunda fase e o dbt, que roda em 3 etapas separadas encadeadas com `chain()` — bronze, silver e gold — cada uma com seus testes. Se o Silver falhar nos testes, o Gold nem executa. A terceira fase e a geracao de insights, que le as tabelas gold e gera 6 tipos de narrativas automaticas, salvando tudo na tabela `gold.insights_risco_fiscal`."
 
 ### P: Por que voce separou o dbt em 3 task groups em vez de rodar tudo junto?
 
@@ -85,6 +85,18 @@
 ### P: Como funciona o download incremental?
 
 **R:** "Antes de baixar dados, os scripts verificam quais anos ja existem. Primeiro tentam ler do GCS via `gcs_utils.read_csv_years_from_gcs()` — ele baixa o CSV do bucket e extrai os anos presentes. Se nao conseguir conectar no GCS (por exemplo, rodando local), faz fallback pro arquivo CSV local. Depois compara com os anos disponiveis na API e baixa apenas os novos. O CAPAG, por exemplo, compara o ano_base: se o CSV ja tem 2017-2022, e a API tem um arquivo novo de 2024 (ano_base 2023), baixa apenas esse. Isso economiza tempo e banda, especialmente na API SIDRA que pode ser lenta."
+
+### P: O download dos dados e feito por web scraping?
+
+**R:** "Nao, nenhum download usa scraping. Todos consomem APIs REST publicas oficiais com a biblioteca `requests` do Python — sem parsing de HTML, sem Selenium, sem BeautifulSoup. O CAPAG usa a API publica do dados.gov.br que retorna JSON com a lista de recursos disponiveis — eu filtro os XLSX, baixo com `requests.get` e leio com `openpyxl`. O PIB usa a API SIDRA do IBGE que retorna JSON direto com os valores. E o cadastro de cidades usa a API REST de Localidades do IBGE. A diferenca e importante: scraping e fragil porque depende da estrutura HTML da pagina, que pode mudar a qualquer momento. API e um contrato — tem documentacao, endpoints estaveis e formatos padronizados."
+
+### P: O que acontece se o formato do arquivo CAPAG mudar?
+
+**R:** "Isso ja acontece — o Tesouro Nacional muda os nomes das colunas entre anos. Arquivo de 2018 tem 'Classificacao_CAPAG', o de 2022 tem 'CAPAG_Oficial', o de 2024 tem 'CAPAG_2022'. Pra lidar com isso, criei um `COLUMN_MAP` no `download_capag.py` com mais de 20 variacoes de nomes mapeadas para o formato padrao. Alem disso, os XLSX do Tesouro as vezes vem com dimensoes declaradas incorretas — o pandas le 3 colunas em vez de 13. Pra isso tenho um fallback com `openpyxl.load_workbook` que le celula por celula, ignorando as dimensoes do arquivo. Tambem tem `detect_header_row` que procura em qual linha estao os cabecalhos reais, porque alguns arquivos tem linhas de titulo antes dos dados."
+
+### P: Por que as cidades nao tem download incremental como CAPAG e PIB?
+
+**R:** "Porque o cadastro de municipios e relativamente estatico — o Brasil tem ~5.570 municipios e isso quase nunca muda (a ultima criacao de municipio foi em 2013). A API de Localidades do IBGE retorna tudo em uma unica chamada rapida (~2 segundos), entao nao vale a pena adicionar logica incremental. Ja o CAPAG e publicado 3 vezes por ano com novos anos-base, e o PIB e publicado anualmente — esses sim crescem e justificam verificar o que ja foi baixado antes."
 
 ---
 
@@ -252,6 +264,10 @@
 ### P: O que acontece se o Terraform Apply falhar no CI/CD?
 
 **R:** "O workflow falha e o desenvolvedor e notificado via GitHub. O state do Terraform nao e corrompido porque o apply e atomico por recurso — se falhar no meio, os recursos ja criados ficam e os que faltam podem ser aplicados na proxima execucao. O plan anterior ao apply serve justamente pra evitar surpresas: como o revisor ja aprovou o que vai mudar no PR, a chance de falha no apply e baixa. Em caso extremo, o `terraform state` permite corrigir inconsistencias manualmente."
+
+### P: Voce e o unico dev, pra que CI/CD?
+
+**R:** "Mesmo sendo projeto solo, o CI/CD resolve problemas reais que eu enfrentei: alterar um modelo SQL e esquecer de validar antes de dar push. Com o CI, o GitHub me avisa em minutos se quebrei algo — sem precisar subir o Airflow e rodar a DAG inteira pra descobrir. Alem disso, o projeto foi desenhado pra ser reproduzivel e escalavel. Se amanha outro engenheiro entrar, ele nao consegue mergear nada na main sem que os checks passem: dbt valido, Docker buildando, Python sem erros de lint, Terraform formatado e validado. Na defesa, isso demonstra que eu sei como projetos reais funcionam em producao — ninguem faz deploy manual numa empresa seria."
 
 ### P: Por que voce criou um Makefile?
 
