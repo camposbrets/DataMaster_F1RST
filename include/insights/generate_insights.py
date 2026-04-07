@@ -251,7 +251,7 @@ def insight_tendencias(client):
             f"No ano base {ultimo_ano}, comparado ao ano anterior: "
             f"{melhorias} municipios melhoraram seu score fiscal, "
             f"{pioras} pioraram e {estaveis} permaneceram estaveis. "
-            f"{'A maioria dos municipios apresentou melhoria, indicando tendencia positiva.' if melhorias > pioras else 'A maioria dos municipios apresentou piora, indicando tendencia preocupante.'}"
+            f"{'Tendencia positiva.' if melhorias > pioras else 'Tendencia preocupante.'}"
         ),
         'metrica_chave': f"Melhorias: {melhorias} | Pioras: {pioras}",
         'valor_metrica': float(melhorias - pioras),
@@ -340,10 +340,7 @@ def save_insights_to_bigquery(client, insights):
             'ano_base': insight['ano_base'],
         })
 
-    # Criar/substituir tabela
-    table_ref = bigquery.Table(INSIGHTS_TABLE, schema=schema)
-
-    # Deletar tabela existente e recriar (WRITE_TRUNCATE)
+    # Criar/substituir tabela (WRITE_TRUNCATE)
     job_config = bigquery.LoadJobConfig(
         schema=schema,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,

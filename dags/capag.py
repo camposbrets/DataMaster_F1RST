@@ -127,7 +127,7 @@ def capag():
 
         output_path = Path(f'{BASE_PATH}/include/dataset/cidades.csv')
         download_cidades(output_path=output_path)
-        log.info(f"Cadastro de municipios baixado com sucesso em {output_path}")    
+        log.info(f"Cadastro de municipios baixado com sucesso em {output_path}")
 
     # =============================================
     # UPLOAD PARA GCS
