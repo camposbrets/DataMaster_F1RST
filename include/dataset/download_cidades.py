@@ -14,6 +14,7 @@ IBGE_LOCALIDADES_URL = "https://servicodados.ibge.gov.br/api/v1/localidades/muni
 OUTPUT_DIR = Path(__file__).parent
 OUTPUT_FILE = OUTPUT_DIR / "CIDADES.csv"
 
+
 def download_cidades(output_path=None):
     """Baixa o cadastro de municipios brasileiros via API de Localidades do IBGE."""
 
@@ -21,12 +22,12 @@ def download_cidades(output_path=None):
         output_path = OUTPUT_FILE
     output_path
 
-    logger.info(f"Baixando cadastro de municipios brasileiros do IBGE...")
+    logger.info("Baixando cadastro de municipios brasileiros do IBGE...")
     logger.info(f"  URL: {IBGE_LOCALIDADES_URL}")
 
     response = requests.get(
         IBGE_LOCALIDADES_URL,
-        params={'orderBy': 'id'}, 
+        params={'orderBy': 'id'},
         timeout=60
     )
     response.raise_for_status()
@@ -48,7 +49,7 @@ def download_cidades(output_path=None):
                 uf_sigla = mun['microrregiao']['mesorregiao']['UF']['sigla']
             except (TypeError, KeyError):
                 pass
-        
+
         if uf_sigla is None:
             logger.warning(
                 f"Municipio sem UF: id={mun.get('id')} nome={mun.get('nome')}. Ignorado."
@@ -63,16 +64,16 @@ def download_cidades(output_path=None):
         })
 
     df = pd.DataFrame(records)
-     
+
     # Validacoes basicas
     total = len(df)
     if total < 5000:
         raise ValueError(f"Numero de municipios baixados ({total}) parece ser muito baixo. Verifique a API do IBGE.")
-    
+
     ufs = df['UF'].nunique()
     if ufs != 27:
         raise ValueError(f"Esperadas 27 UFs, encontradas ({ufs}). Verifique a API do IBGE.")
-    
+
     # Salvar CSV
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
@@ -82,6 +83,7 @@ def download_cidades(output_path=None):
     logger.info(f"  Total de UFs: {ufs}")
 
     return df
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

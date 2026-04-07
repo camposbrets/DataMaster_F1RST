@@ -8,7 +8,6 @@ Variaveis (tabela 5938):
 
 import logging
 import time
-from urllib import response
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -44,18 +43,20 @@ UF_MAP = {
     '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE',
     '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP',
     '41': 'PR', '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT',
-    '52': 'GO', '53':  'DF',
+    '52': 'GO', '53': 'DF',
 }
+
 
 def _create_session():
     """Cria uma sessão de requests com retry configurado."""
     session = requests.Session()
     retry_strategy = Retry(total=3, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504],)
-    
+
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
     return session
+
 
 def _get_existing_years(output_path):
     """Le CSV existente e retorna set de anos já baixados."""
@@ -78,13 +79,14 @@ def _get_existing_years(output_path):
     except Exception as e:
         logger.warning(f"Erro ao ler arquivo existente {output_path}: {e}. Baixando tudo.")
         return set()
-    
+
+
 def _fetch_sidra_variable_batch(session, var_code, years):
     """Busca uma variavel para todos os anos de uma vez via API SIDRA"""
     years_param = ','.join(str(y) for y in years)
     col_name = VARIABLE_MAP.get(var_code, '?')
     url = f"{SIDRA_API_BASE}/t/5938/n6/all/v/{var_code}/p/{years_param}/h/n"
-    
+
     logger.info(f"   Baixando {col_name} (var {var_code}) para {len(years)} anos: [{years[0]}, {years[-1]}]...")
     start = time.time()
 
@@ -126,6 +128,7 @@ def _fetch_sidra_variable_batch(session, var_code, years):
     logger.info(f"  {col_name}: recebido {len(result)} registros válidos ({elapsed:.1f}s)")
     return result
 
+
 def download_pib(output_path=None):
     """Baixa dados do PIB Municipal via API SIDRA e salva como CSV."""
     if output_path is None:
@@ -139,10 +142,10 @@ def download_pib(output_path=None):
     if not years_to_download:
         logger.info("Todos os anos já estão presentes no arquivo. Nenhum download necessário.")
         return pd.read_csv(output_path)
-    
-    logger.info(f"Baixando PIB Municipal da API SIDRA (tabela 5938)...")
+
+    logger.info("Baixando PIB Municipal da API SIDRA (tabela 5938)...")
     logger.info(f"Anos a baixar: {years_to_download} ({len(years_to_download)} anos)")
-    logger.info(f"Total de requests: 1 (variavel unica: PIB, todos os anos agrupados)")
+    logger.info("Total de requests: 1 (variavel unica: PIB, todos os anos agrupados)")
 
     session = _create_session()
 
@@ -154,13 +157,13 @@ def download_pib(output_path=None):
             logger.error(f"Erro ao baixar dados novos: {e}. Retornando dados existentes.")
             return pd.read_csv(output_path)
         raise ValueError(f"Falha ao baixar PIB da API SIDRA: {e}")
-    
+
     if df_raw.empty:
         if existing_years:
             logger.warning("Nenhum dado novo foi baixado. Retornando dados existentes.")
             return pd.read_csv(output_path)
         raise ValueError("Nenhum dado foi baixado com sucesso da API SIDRA")
-    
+
     logger.info(f"Dados novos recebidos: {len(df_raw)} registros. Processando...")
 
     # Renomear coluna de valor para 'pib' (variavel unica)
@@ -194,8 +197,9 @@ def download_pib(output_path=None):
 
     total_years = sorted(df_final['ano'].unique())
     logger.info(f"Salvo {len(df_final)} registros no total, cobrindo anos: {total_years}")
-    
+
     return df_final
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -203,5 +207,5 @@ if __name__ == '__main__':
     print(f"\nTotal: {len(df)} registros")
     print(f"Anos: {sorted(df['ano'].unique())}")
     print(f"Municipios por ano: {df.groupby('ano').size().to_dict()}")
-    print(f"\nAmostra:")
+    print("\nAmostra:")
     print(df.head(10))

@@ -44,6 +44,12 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 
 ## 2. Arquitetura de Solução
 
+### Diagrama do Pipeline
+
+![Pipeline de Dados — Sistema de Risco Fiscal Municipal](pipeline_oficial.png)
+
+### Fluxo Detalhado
+
 ```
                     ┌──────────────────────────────────────┐
                     │        GitHub Actions (CI/CD)         │
@@ -224,6 +230,110 @@ Modelos de negócio prontos para consumo analítico e dashboards.
 | --- | --- |
 | `insights_risco_fiscal` | Narrativas automáticas geradas pelo agente de insights (6 tipos) |
 
+### Modelagem de Dados — Camada Gold
+
+```mermaid
+erDiagram
+    gld_dim_classificacao_capag {
+        INT classificacao_capag_id PK
+        STRING classificacao_capag
+        STRING descricao
+    }
+
+    gld_dim_uf {
+        INT uf_id PK
+        STRING uf
+    }
+
+    gld_dim_instituicoes {
+        INT cod_ibge PK
+        STRING nome_instituicao
+        STRING uf
+    }
+
+    gld_fato_indicadores_capag {
+        STRING indicador_id PK
+        INT cod_ibge FK
+        INT ano_base
+        INT populacao
+        FLOAT indicador_1
+        STRING nota_1
+        FLOAT indicador_2
+        STRING nota_2
+        FLOAT indicador_3
+        STRING nota_3
+        STRING icf
+        INT uf_id FK
+        INT classificacao_capag_id FK
+    }
+
+    gld_fato_pib_municipal {
+        STRING pib_id PK
+        INT cod_ibge FK
+        INT ano
+        FLOAT pib
+        FLOAT taxa_crescimento_pib
+        INT uf_id FK
+    }
+
+    gld_fato_risco_fiscal {
+        STRING risco_fiscal_id PK
+        INT cod_ibge FK
+        INT ano_base
+        STRING nome_municipio
+        STRING uf
+        STRING classificacao_capag
+        INT score_capag_base
+        INT score_crescimento_pib
+        INT score_risco_fiscal
+        STRING classificacao_risco
+        STRING faixa_populacao
+        BOOLEAN tem_pib
+    }
+
+    gld_report_risco_fiscal_municipal {
+        INT cod_ibge FK
+        INT ano_base
+        STRING nome_municipio
+        INT score_risco_fiscal
+        STRING classificacao_risco
+    }
+
+    gld_report_tendencia_anual {
+        INT cod_ibge FK
+        INT ano_base
+        INT score_risco_fiscal
+        STRING tendencia
+        FLOAT variacao_score
+    }
+
+    gld_report_agregacao_estadual {
+        STRING uf
+        INT ano_base
+        INT total_municipios
+        FLOAT score_risco_medio
+        FLOAT pib_total_estado
+    }
+
+    gld_report_capag_vs_pib {
+        INT cod_ibge FK
+        INT ano_base
+        STRING classificacao_capag
+        FLOAT pib
+        INT score_risco_fiscal
+    }
+
+    gld_dim_classificacao_capag ||--o{ gld_fato_indicadores_capag : "classificacao_capag_id"
+    gld_dim_uf ||--o{ gld_fato_indicadores_capag : "uf_id"
+    gld_dim_uf ||--o{ gld_fato_pib_municipal : "uf_id"
+    gld_dim_instituicoes ||--o{ gld_fato_indicadores_capag : "cod_ibge"
+    gld_dim_instituicoes ||--o{ gld_fato_pib_municipal : "cod_ibge"
+    gld_dim_instituicoes ||--o{ gld_fato_risco_fiscal : "cod_ibge"
+    gld_fato_risco_fiscal ||--o{ gld_report_risco_fiscal_municipal : "cod_ibge"
+    gld_fato_risco_fiscal ||--o{ gld_report_tendencia_anual : "cod_ibge"
+    gld_fato_risco_fiscal ||--o{ gld_report_capag_vs_pib : "cod_ibge"
+```
+
 ### Score de Risco Fiscal (0–100 pontos)
 
 O score combina dois componentes independentes. Quando apenas um componente está disponível, ele é reescalado para 0–100. Quando nenhum está disponível, o score é NULL e a classificação é INDETERMINADO.
@@ -382,28 +492,65 @@ Cada insight contém: `titulo`, `narrativa`, `metrica_chave`, `valor_metrica`, `
 
 ## 8. Dashboards no Metabase
 
-O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e consome as tabelas do dataset `gold` no BigQuery.
+O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e consome as tabelas do dataset `gold` no BigQuery. O Metabase já sobe automaticamente junto com o Airflow ao executar `astro dev start`.
+
+> **Todas as queries SQL dos dashboards estão documentadas em [`include/metabase-data/queries_metabase.sql`](include/metabase-data/queries_metabase.sql)**, com comentários sobre o tipo de visualização e filtros recomendados para cada card.
+
+### Passo a passo para criar os dashboards
+
+1. **Conectar ao BigQuery** (pré-requisito — feito uma vez):
+   - Acesse http://localhost:3000
+   - Vá em **Admin** → **Databases** → **Add Database**
+   - Selecione **BigQuery**, aponte para o projeto `projeto-data-master`
+   - Após sincronizar, as tabelas do dataset `gold` estarão disponíveis
+
+2. **Criar as Perguntas (Questions)** a partir das queries:
+   - Clique em **"+ Novo"** → **"Pergunta SQL"**
+   - Cole a query correspondente do arquivo `queries_metabase.sql`
+   - Escolha a visualização adequada (indicado nos comentários da query)
+   - Salve em uma coleção organizada (ex: `Risco Fiscal / [Nome do Dashboard]`)
+
+3. **Montar o Dashboard**:
+   - Clique em **"+ Novo"** → **"Dashboard"**
+   - No modo edição, clique **"+"** para adicionar as perguntas salvas
+   - Adicione filtros: UF, Ano, Classificação de Risco
+   - Conecte cada filtro às colunas correspondentes nas perguntas
+
+4. **Layout recomendado**:
+   - KPIs (números/gauges) → topo
+   - Gráficos de distribuição → meio
+   - Tabelas detalhadas → parte inferior
 
 ### Dashboard 1: Painel de Risco Fiscal Municipal
 - **Fonte:** `gold.gld_report_risco_fiscal_municipal`
 - **Filtros:** UF, Ano, Classificação de Risco, Faixa Populacional
-- **Cards:** Distribuição por risco (pizza/barras), Top 10 maior/menor risco, Score médio, Tabela detalhada com indicadores
+- **Cards:**
+  - Distribuição por risco (pizza/donut) — query 1.1
+  - Score médio nacional (gauge 0–100) — query 1.2
+  - Top 10 maior risco (tabela) — query 1.3
+  - Top 10 menor risco (tabela) — query 1.4
+  - Busca por município individual (tabela) — query 1.5
 
 ### Dashboard 2: Tendências Anuais
 - **Fonte:** `gold.gld_report_tendencia_anual`
-- **Cards:** Evolução do score médio por ano (linha), Melhorias vs Pioras por ano (barras empilhadas), Variação de score por município
+- **Cards:**
+  - Evolução do score médio por ano (gráfico de linha) — query 2.1
+  - Melhorias vs Pioras por ano (barras empilhadas) — query 2.2
+  - Heatmap score médio por UF (pivot table) — query 2.3
 
-### Dashboard 3: CAPAG vs PIB
+### Dashboard 3: Visão Estadual — PIB × Score
+- **Fonte:** `gold.gld_report_agregacao_estadual`
+- **Cards:**
+  - % municípios em risco alto/crítico por UF (barras horizontais) — query 3.1
+  - PIB total do estado vs Score médio (scatter plot) — query 3.2
+
+### Dashboard 4: CAPAG vs PIB
 - **Fonte:** `gold.gld_report_capag_vs_pib`
 - **Cards:** Scatter PIB × Score, Risco médio por faixa populacional, Endividamento vs PIB, Comparativo por classificação CAPAG
 
-### Dashboard 4: Visão Estadual
-- **Fonte:** `gold.gld_report_agregacao_estadual`
-- **Cards:** Ranking de estados por score médio, % municípios em risco alto por UF, PIB total do estado vs Score, Indicadores médios por estado
-
 ### Dashboard 5: Insights Automáticos
 - **Fonte:** `gold.insights_risco_fiscal`
-- **Cards:** Narrativas automáticas ordenadas por prioridade, métrica-chave de cada insight
+- **Cards:** Narrativas automáticas ordenadas por prioridade (tabela formatada) — query 4.1
 
 ---
 
@@ -524,70 +671,106 @@ O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflo
 
 ## 11. Reprodução do Projeto
 
-### Pré-requisitos
-- 16GB RAM
-- Docker Desktop
-- Astro CLI (`astro version`)
-- Conta Google Cloud (com BigQuery e GCS habilitados)
+> **Objetivo:** Qualquer pessoa deve conseguir clonar o repositório e reproduzir o projeto completo em outra máquina ou ambiente, seguindo os passos abaixo.
 
-### Passo 1: Provisionar infraestrutura (Terraform)
+### Pré-requisitos
+
+| Requisito | Versão mínima | Verificar com |
+| --- | --- | --- |
+| Docker Desktop | 4.x | `docker --version` |
+| Astro CLI | 1.x | `astro version` |
+| Terraform | 1.7+ | `terraform --version` |
+| Git | 2.x | `git --version` |
+| Conta Google Cloud | — | Com BigQuery e GCS habilitados |
+| RAM | 16 GB | — |
+
+### Passo 1: Clonar o repositório
 
 ```bash
-# Primeira vez: inicializa e aplica
-make infra-init
-make infra-apply
-
-# Ou manualmente:
-cd infra && terraform init && terraform apply
+git clone https://github.com/<seu-usuario>/DataMaster_F1RST.git
+cd DataMaster_F1RST
 ```
 
-Isso cria o bucket GCS e os 6 datasets no BigQuery automaticamente.
+### Passo 2: Configurar a Service Account do GCP
 
-### Passo 2: Iniciar o ambiente
+1. Acesse o [Console do Google Cloud](https://console.cloud.google.com/)
+2. Crie um projeto (ou use existente) — anote o **Project ID**
+3. Habilite as APIs:
+   - BigQuery API
+   - Cloud Storage API
+4. Vá em **IAM e Admin** → **Service Accounts** → **Criar Service Account**
+5. Atribua as roles:
+   - **BigQuery Admin**
+   - **Storage Admin**
+6. Gere uma chave JSON e salve em:
+   ```
+   include/gcp/service_account.json
+   ```
+
+> **Segurança:** O arquivo `service_account.json` está no `.gitignore` e **não deve ser commitado**. Cada pessoa que reproduzir o projeto deve gerar sua própria chave.
+
+### Passo 3: Ajustar Project ID e Bucket (se necessário)
+
+Se o seu Project ID for diferente de `projeto-data-master` ou o bucket for diferente de `bruno_dm`, altere nos arquivos:
+
+| Arquivo | O que alterar |
+| --- | --- |
+| `include/dbt/profiles.yml` | Campo `project` |
+| `include/dbt/models/sources/sources.yml` | Campo `database` em cada source |
+| `dags/capag.py` | Variável `GCS_BUCKET` no topo do arquivo |
+| `infra/variables.tf` | Defaults de `project_id` e `gcs_bucket_name` |
+
+### Passo 4: Provisionar infraestrutura (Terraform)
 
 ```bash
-# Abrir Docker Desktop
-# No terminal, na pasta do projeto:
+# Inicializa o Terraform (primeira vez)
+make infra-init
+
+# Visualiza o que será criado (opcional, recomendado)
+make infra-plan
+
+# Aplica — cria o bucket GCS + 6 datasets BigQuery
+make infra-apply
+```
+
+Ou manualmente:
+```bash
+cd infra && terraform init && terraform plan && terraform apply
+```
+
+**O que é criado automaticamente:**
+- 1 bucket GCS com versionamento e lifecycle policies
+- 6 datasets BigQuery: `capag`, `cidades`, `pib`, `bronze`, `silver`, `gold`
+
+### Passo 5: Iniciar o ambiente (Airflow + Metabase)
+
+```bash
+# Certifique-se que o Docker Desktop está rodando, então:
 astro dev start
 # Ou: make airflow-start
 ```
 
-Isso inicia Airflow (http://localhost:8080) e Metabase (http://localhost:3000).
+Isso inicia todos os containers:
+- **Airflow Webserver**: http://localhost:8080 (user: `admin`, senha: `admin`)
+- **Metabase**: http://localhost:3000
 
-### Passo 3: Configurar Google Cloud
+> **Nota:** Na primeira vez, o build da imagem Docker pode levar alguns minutos (instala dbt_venv + dependências).
 
-1. Criar projeto no GCP (ou usar existente)
-2. Criar Service Account com roles:
-   - BigQuery Admin
-   - Storage Admin
-3. Gerar chave JSON e salvar em `include/gcp/service_account.json`
+### Passo 6: Configurar conexão GCP no Airflow
 
-> **Nota:** O bucket GCS e os 6 datasets BigQuery já foram criados automaticamente pelo Terraform no Passo 1. Não é necessário criá-los manualmente.
+1. Acesse http://localhost:8080 (user: `admin`, senha: `admin`)
+2. Vá em **Admin** → **Connections** → **+** (Add Connection)
+3. Preencha:
+   - **Connection Id:** `gcp`
+   - **Connection Type:** `Google Cloud`
+   - **Keyfile Path:** `/usr/local/airflow/include/gcp/service_account.json`
+4. Clique **Save**
 
-### Passo 4: Ajustar Project ID
+### Passo 7: Executar a DAG do pipeline
 
-Se o Project ID for diferente de `projeto-data-master`, alterar em:
-- `include/dbt/profiles.yml` → campo `project`
-- `include/dbt/models/sources/sources.yml` → campo `database` em cada source
-
-Se o bucket for diferente de `bruno_dm`, alterar em:
-- `dags/capag.py` → variável `GCS_BUCKET` no topo do arquivo
-- `infra/variables.tf` → defaults de `project_id` e `gcs_bucket_name`
-
-### Passo 5: Configurar Airflow
-
-1. Acessar http://localhost:8080 (user: admin, pass: admin)
-2. Ir em Admin → Connections
-3. Criar conexão:
-   - **Connection Id:** gcp
-   - **Connection Type:** Google Cloud
-   - **Keyfile Path:** /usr/local/airflow/include/gcp/service_account.json
-
-### Passo 6: Executar a DAG
-
-1. Na tela principal do Airflow, ativar a DAG `capag`
-2. Clicar em "Trigger DAG" para executar
-3. Acompanhar a execução na view Graph:
+1. Na tela principal do Airflow, ative a DAG `capag`
+2. Clique em **"Trigger DAG"** para executar
+3. Acompanhe a execução na view **Graph**:
 
 ```
 [Terraform já provisionou: GCS bucket + 6 datasets BigQuery]
@@ -601,12 +784,59 @@ download_pib ─────→ upload_pib ────┘
 Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 tables) → dbt test → Insights
 ```
 
-### Passo 7: Configurar Metabase
+> A execução completa leva ~15–30 minutos na primeira vez (download de todas as fontes). Execuções subsequentes são incrementais (apenas anos novos).
 
-1. Acessar http://localhost:3000
-2. Fazer cadastro inicial
-3. Adicionar database: BigQuery → `projeto-data-master`
-4. Criar dashboards usando as tabelas do dataset `gold`
+### Passo 8: Configurar Metabase e criar dashboards
+
+1. Acesse http://localhost:3000
+2. Faça o cadastro inicial (crie conta de admin)
+3. Conecte ao BigQuery:
+   - Vá em **Admin** → **Databases** → **Add Database**
+   - Tipo: **BigQuery**
+   - Project ID: `projeto-data-master` (ou o seu)
+   - Service Account JSON: cole o conteúdo do `service_account.json`
+4. Aguarde a sincronização das tabelas (1–2 minutos)
+5. Crie os dashboards usando as queries documentadas em:
+   - **[`include/metabase-data/queries_metabase.sql`](include/metabase-data/queries_metabase.sql)** — contém todas as queries SQL com comentários sobre tipo de visualização, eixos e filtros recomendados
+
+> **Detalhes completos sobre a criação de cada dashboard, cards e filtros estão na [Seção 8 — Dashboards no Metabase](#8-dashboards-no-metabase).**
+
+### Passo 9: Verificar os resultados
+
+Após a DAG completar com sucesso, valide:
+
+| Verificação | Como |
+| --- | --- |
+| Dados no BigQuery | Console GCP → BigQuery → datasets bronze/silver/gold |
+| Testes dbt ok | Airflow → logs das tasks `dbt_test_*` (0 failures) |
+| Insights gerados | BigQuery → `gold.insights_risco_fiscal` (6 linhas) |
+| Dashboards | Metabase → http://localhost:3000 |
+
+### Resumo dos comandos principais (Makefile)
+
+```bash
+make help              # Lista todos os comandos disponíveis
+make setup             # Setup completo (Terraform + Airflow + Metabase)
+make infra-init        # terraform init (primeira vez)
+make infra-plan        # terraform plan (preview)
+make infra-apply       # terraform apply (cria infra no GCP)
+make airflow-start     # Inicia Airflow + Metabase via Docker
+make airflow-stop      # Para os containers
+make airflow-restart   # Reinicia os containers
+make dbt-compile       # Valida SQL dos modelos dbt (sem executar)
+make dbt-docs          # Gera e abre documentação do dbt
+```
+
+### Comandos para parar/limpar o ambiente
+
+```bash
+# Parar os containers (preserva dados)
+astro dev stop
+# Ou: make airflow-stop
+
+# Destruir infraestrutura GCP (CUIDADO — remove bucket e datasets)
+make infra-destroy
+```
 
 ---
 
@@ -661,8 +891,10 @@ DataMaster_F1RST/
 │   │   └── tests/                         # 5 testes singulares
 │   ├── insights/
 │   │   └── generate_insights.py           # Agente de insights automáticos
+│   ├── metabase-data/
+│   │   └── queries_metabase.sql           # Queries SQL para os dashboards do Metabase
 │   └── gcp/
-│       └── service_account.json           # Credenciais GCP
+│       └── service_account.json           # Credenciais GCP (não commitado)
 ├── infra/
 │   ├── main.tf                            # Provider GCP, bucket GCS, datasets BigQuery
 │   ├── variables.tf                       # Variáveis centralizadas (project_id, region, bucket)
