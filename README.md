@@ -5,15 +5,16 @@
 1. [Objetivo do Projeto](#1-objetivo-do-projeto)
 2. [Arquitetura de Solução](#2-arquitetura-de-solução)
 3. [Fontes de Dados](#3-fontes-de-dados)
-4. [Arquitetura Medalhão (Bronze / Silver / Gold)](#4-arquitetura-medalhão-bronze--silver--gold)
+4. [Arquitetura Medalhão](#4-arquitetura-medalhão-bronze--silver--gold)
 5. [Pipeline de Dados](#5-pipeline-de-dados)
-6. [Validação de Qualidade (dbt tests)](#6-validação-de-qualidade-dbt-tests)
+6. [Validação de Qualidade](#6-validação-de-qualidade-dbt-tests)
 7. [Insights Automáticos](#7-insights-automáticos)
 8. [Dashboards no Metabase](#8-dashboards-no-metabase)
-9. [Infraestrutura como Código (Terraform)](#9-infraestrutura-como-código-terraform)
-10. [CI/CD (GitHub Actions)](#10-cicd-github-actions)
+9. [Infraestrutura como Código](#9-infraestrutura-como-código-terraform)
+10. [CI/CD](#10-cicd-github-actions)
 11. [Reprodução do Projeto](#11-reprodução-do-projeto)
 12. [Stack Tecnológica](#12-stack-tecnológica)
+13. [Melhorias Futuras e Considerações Finais](#13-melhorias-futuras-e-considerações-finais)
 
 ---
 
@@ -34,11 +35,15 @@ O processo CAPAG (Capacidade de Pagamento) é um sistema de avaliação da Secre
 | Indicador 3 | Liquidez | Acima de 1 = adequado |
 | ICF | Qualidade da Informação Contábil e Fiscal | Ranking Siconfi |
 
-> **Nota sobre o ICF (a partir de 2024):** O ICF (Índice de Qualidade da Informação Contábil e Fiscal) é a nota obtida pelo município no [Ranking da Qualidade da Informação Contábil e Fiscal no Siconfi](https://ranking-municipios.tesouro.gov.br/). A partir de 2024, a classificação final da CAPAG passou a considerar não apenas as notas 1, 2 e 3, mas também o ICF. Isso significa que municípios com baixa qualidade de informação contábil podem ter sua nota CAPAG rebaixada. Para anos anteriores a 2024 (ano_base < 2023), esta coluna é nula pois o indicador não existia.
+> **Nota sobre o ICF (a partir de 2024):** O ICF (Índice de Qualidade da Informação Contábil e Fiscal) é a nota obtida pelo município no [Ranking da Qualidade da Informação Contábil e Fiscal no Siconfi](https://ranking-municipios.tesouro.gov.br/). A partir de 2024, a classificação final da CAPAG passou a considerar não apenas as notas 1, 2 e 3, mas também o ICF. Isso significa que municípios com baixa qualidade de informação contábil podem ter sua nota CAPAG rebaixada. Para anos anteriores a 2024 (ano_base < 2023), esta coluna é nula, pois o indicador não existia.
 
 ### O que é PIB Municipal?
 
-Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município. O download é feito via API SIDRA, retornando o PIB a preços correntes (variável 37 — Mil Reais) para todos os municípios, com cobertura de 2015 a 2023.
+O **PIB (Produto Interno Bruto)** é o principal indicador econômico de um país, estado ou município. Ele representa a soma de todos os bens e serviços finais produzidos em uma determinada região durante um período (geralmente um ano). Em outras palavras, o PIB mede o "tamanho" da economia local — quanto maior o PIB, maior a atividade econômica daquele município.
+
+Neste projeto, o PIB Municipal é utilizado como complemento à avaliação CAPAG: municípios com PIB em crescimento tendem a ter maior capacidade de geração de receita, o que contribui positivamente para o score de risco fiscal.
+
+Os dados são obtidos do **IBGE** (tabela SIDRA 5938), que publica o PIB de todos os municípios brasileiros. O download é feito via API SIDRA, retornando o PIB a preços correntes, com cobertura de 2015 a 2023.
 
 ---
 
@@ -46,19 +51,19 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 
 ### Diagrama do Pipeline
 
-![Pipeline de Dados — Sistema de Risco Fiscal Municipal](pipeline_oficial.png)
+![Pipeline de Dados — Sistema de Risco Fiscal Municipal](imagens/pipeline_oficial.png)
 
 ### Fluxo Detalhado
 
 ```
                     ┌──────────────────────────────────────┐
-                    │        GitHub Actions (CI/CD)         │
-                    │  ci.yml: dbt + Docker + Python lint   │
-                    │  terraform.yml: plan (PR) / apply     │
+                    │        GitHub Actions (CI/CD)        │
+                    │  ci.yml: dbt + Docker + Python lint  │
+                    │  terraform.yml: plan (PR) / apply    │
                     └──────────────────┬───────────────────┘
                                        │
 ┌──────────────────────────────────────────────────────────────┐
-│                  Terraform (infra/)                           │
+│                  Terraform (infra/)                          │
 │   Provisiona: GCS bucket + 6 datasets BigQuery + lifecycle   │
 └──────────────────────────┬───────────────────────────────────┘
                            │ provisiona
@@ -67,17 +72,17 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 │  dados.gov.br   │   │  IBGE / SIDRA   │   │ IBGE Localidades│
 │  (CAPAG XLSX)   │   │  (PIB Municipal)│   │   (Municípios)  │
 └────────┬────────┘   └────────┬────────┘   └────────┬────────┘
-         │ download              │ download            │ download
-         ▼                       ▼                     ▼
+         │ download            │ download            │ download
+         ▼                     ▼                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   Google Cloud Storage                       │
-│     (raw/capag.csv, raw/pib_municipal.csv, raw/cidades.csv)  │
+│                   Google Cloud Storage                      │
+│     (raw/capag.csv, raw/pib_municipal.csv, raw/cidades.csv) │
 └──────────────────────────┬──────────────────────────────────┘
                            │ load
                            ▼
 ┌─────────────────────────────────────────┐
-│              BigQuery                    │
-│                                          │
+│              BigQuery                   │
+│                                         │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ │
 │  │  BRONZE  │→│  SILVER  │→│   GOLD   │ │
 │  │  (views) │ │ (limpo)  │ │ (negócio)│ │
@@ -93,54 +98,47 @@ Dados do IBGE (tabela SIDRA 5938) com o Produto Interno Bruto de cada município
 └──────────────┘  └──────────────┘
 ```
 
-### Infraestrutura (Terraform)
+### Infraestrutura e CI/CD
 
-Toda a infraestrutura GCP é provisionada via **Terraform** (`infra/`), incluindo:
-- Bucket GCS com versionamento e lifecycle policies (Nearline após 90 dias)
-- 6 datasets BigQuery (capag, cidades, pib, bronze, silver, gold) com labels por camada
-- Variáveis centralizadas em `variables.tf` para fácil customização
+- **Terraform:** toda a infraestrutura GCP (bucket GCS + 6 datasets BigQuery) é provisionada como código. Detalhes na [Seção 9](#9-infraestrutura-como-código-terraform).
+- **GitHub Actions:** validação automática de SQL, Docker e infraestrutura a cada envio de código. Detalhes na [Seção 10](#10-cicd-github-actions).
 
-### CI/CD (GitHub Actions)
+### Orquestração
 
-Dois workflows automatizados em `.github/workflows/`:
-- **CI - Pipeline de Dados** (`ci.yml`): valida sintaxe SQL (dbt parse) em todo push/PR na main
-- **Terraform - Infraestrutura** (`terraform.yml`): plan em PR, apply em merge na main
-
-### Orquestração (Airflow)
+O **Apache Airflow** é o orquestrador que coordena a execução de todas as etapas do pipeline na ordem correta. O fluxo resumido é:
 
 ```
-[download_capag, download_pib, download_cidades]  (paralelo, retries=2, timeout=30min)
-    → [upload GCS: capag, cidades, pib]  (paralelo)
-    → [GCS → BigQuery raw tables]
-    → Bronze (dbt run — DbtTaskGroup)
-    → dbt test bronze (external_python no dbt_venv)
-    → Silver (dbt run — DbtTaskGroup)
-    → dbt test silver
-    → Gold (dbt run — DbtTaskGroup)
-    → dbt test gold
-    → Geração de Insights Automáticos (salva em gold.insights_risco_fiscal)
+Download das 3 fontes (em paralelo)
+    → Upload dos arquivos para o Google Cloud Storage (em paralelo)
+    → Carga dos dados brutos no BigQuery
+    → Transformação Bronze (3 views) → Testes de qualidade
+    → Transformação Silver (5 tabelas) → Testes de qualidade
+    → Transformação Gold (10 tabelas) → Testes de qualidade
+    → Geração de Insights Automáticos
 ```
 
 **Resiliência do pipeline:**
-- `default_args`: retries=1, retry_delay=2min, execution_timeout=60min por task
-- Tasks de download: retries=2, retry_delay=3min, timeout=30min (APIs externas)
-- `max_active_runs=1`: evita execuções paralelas da mesma DAG
-- `dagrun_timeout=4h`: timeout total do pipeline
-- `on_failure_callback`: log estruturado de falhas (extensível para Slack/email)
+
+O pipeline foi configurado para lidar com falhas comuns (como indisponibilidade temporária das APIs externas) de forma automática, sem necessidade de intervenção manual:
+
+- **Retentativas automáticas:** por padrão, cada task tenta executar até 2 vezes caso falhe, com um intervalo de 2 minutos entre as tentativas. Para as tasks de download (que dependem de APIs externas e são mais suscetíveis a falhas de rede), são permitidas até 3 tentativas, com intervalo de 3 minutos.
+- **Limites de tempo (timeouts):** cada task tem um tempo máximo de execução de 60 minutos. Tasks de download possuem um limite mais curto de 30 minutos, pois caso a API não responda nesse tempo, provavelmente está fora do ar. O pipeline completo tem um limite total de 4 horas.
+- **Execução única:** apenas uma execução da DAG pode rodar por vez (`max_active_runs=1`), evitando que execuções concorrentes disputem os mesmos recursos ou gerem dados duplicados.
+- **Notificação de falhas:** em caso de erro, um callback registra logs estruturados com detalhes da falha (task, horário, mensagem de erro), facilitando o diagnóstico. Esse mecanismo pode ser estendido para enviar notificações via Slack ou e-mail.
 
 **Download incremental:**
-- Antes de baixar, os scripts verificam quais anos já existem no GCS (via `gcs_utils.py`) ou no CSV local
-- Apenas anos novos são baixados e concatenados ao CSV existente, evitando reprocessamento desnecessário
+
+Para evitar reprocessamento desnecessário a cada execução, os scripts de download são inteligentes: antes de baixar, eles verificam quais anos já existem no Google Cloud Storage (via `gcs_utils.py`) ou no arquivo CSV local. Apenas dados de anos novos são baixados e adicionados ao arquivo existente. Isso economiza tempo e recursos, especialmente em execuções recorrentes.
 
 ---
 
 ## 3. Fontes de Dados
 
-| Fonte | Origem | Frequência | Download | Freshness (dbt) |
-| --- | --- | --- | --- | --- |
-| CAPAG | dados.gov.br (Tesouro Nacional) | Quadrimestral | Automático via API (XLSX → CSV) | warn: 120d, error: 180d |
-| Cidades | IBGE API Localidades | Relativamente estático | Automático via API | — |
-| PIB Municipal | IBGE SIDRA (tabela 5938) | Anual | Automático via API SIDRA (requests) | warn: 365d, error: 450d |
+| Fonte | Origem | Frequência de atualização | Download |
+| --- | --- | --- | --- |
+| CAPAG | dados.gov.br (Tesouro Nacional) | Quadrimestral (a cada 4 meses) | Automático via API (XLSX → CSV) |
+| Cidades | IBGE API Localidades | Relativamente estático | Automático via API |
+| PIB Municipal | IBGE SIDRA (tabela 5938) | Anual | Automático via API SIDRA |
 
 ### Estrutura do CAPAG (13 colunas)
 
@@ -178,52 +176,59 @@ Dois workflows automatizados em `.github/workflows/`:
 
 ---
 
-## 4. Arquitetura Medalhão (Bronze / Silver / Gold)
+## 4. Arquitetura Medalhão
 
 ### Bronze (dataset: `bronze`) — 3 views
-Views que espelham 1:1 os dados brutos do BigQuery. Sem transformação.
 
-| Modelo | Source |
+A camada Bronze contém views que espelham os dados brutos exatamente como foram carregados nas tabelas raw do BigQuery (vindas do GCS), servindo como ponto de partida rastreável para as transformações seguintes.
+
+| Modelo | Fonte dos dados |
 | --- | --- |
-| `brz_capag_brasil` | capag.capag_brasil |
-| `brz_cidades_brasil` | cidades.cidades_brasil |
-| `brz_pib_municipal` | pib.pib_municipal |
+| `brz_capag_brasil` | Tabela bruta de CAPAG |
+| `brz_cidades_brasil` | Tabela bruta de municípios |
+| `brz_pib_municipal` | Tabela bruta de PIB Municipal |
 
 ### Silver (dataset: `silver`) — 5 tabelas
-Dados limpos, tipados, deduplicados e validados. Particionados por ano quando aplicável.
+Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" do projeto — qualquer análise deve partir daqui ou da camada Gold. Particionados por ano quando aplicável.
 
 | Modelo | Descrição | Partição |
 | --- | --- | --- |
-| `slv_capag_municipios` | CAPAG limpo: SAFE_CAST, dedup por cod_ibge+ano_base, tratar `n.d.` como NULL, surrogate key | ano_base |
-| `slv_cidades` | Municípios deduplicados por cod_ibge (ROW_NUMBER) | — |
-| `slv_pib_municipal` | PIB limpo, deduplicado (mantém maior PIB em caso de duplicata), surrogate key | ano |
-| `slv_dim_uf` | Dimensão UF: union distinct de CAPAG + cidades, gera `uf_id` com ROW_NUMBER | — |
-| `slv_dim_classificacao_capag` | Dimensão classificação (A/B/C/D) com descrição por extenso, gera `classificacao_capag_id` | — |
+| `slv_capag_municipios` | CAPAG limpo: conversão segura de tipos de dados, remoção de registros duplicados (por cod_ibge + ano_base), tratamento de valores inválidos (como `n.d.`) convertidos para nulo, e geração de chave única para cada registro | ano_base |
+| `slv_cidades` | Municípios com remoção de duplicatas por código IBGE (mantém apenas um registro por município) | — |
+| `slv_pib_municipal` | PIB limpo, com remoção de duplicatas (em caso de duplicata, mantém o registro com maior PIB), e geração de chave única para cada registro | ano |
+| `slv_dim_uf` | Tabela de referência das Unidades Federativas: consolida todas as UFs presentes nos dados de CAPAG e de cidades, eliminando repetições e atribuindo um identificador numérico único para cada UF | — |
+| `slv_dim_classificacao_capag` | Tabela de referência das classificações CAPAG (A, B, C, D) com suas descrições por extenso (ex.: "A — Boa capacidade de pagamento"), atribuindo um identificador numérico único para cada classificação | — |
 
 ### Gold (dataset: `gold`) — 10 tabelas
 Modelos de negócio prontos para consumo analítico e dashboards.
 
 #### Dimensões (3 tabelas)
+
+Tabelas de referência ("cadastros") que descrevem as entidades do modelo e são usadas pelas tabelas de fatos para enriquecer as análises:
+
 | Modelo | Descrição |
 | --- | --- |
-| `gld_dim_instituicoes` | Municípios com nome, cod_ibge, UF — FULL OUTER JOIN entre cidades e CAPAG para não perder registros |
-| `gld_dim_uf` | Unidades Federativas (promove slv_dim_uf para Gold) |
-| `gld_dim_classificacao_capag` | Classificações CAPAG com descrição (promove slv_dim_classificacao_capag para Gold) |
+| `gld_dim_instituicoes` | Cadastro completo de municípios (nome, código IBGE, UF). Combina os dados de cidades e de CAPAG de forma a não perder nenhum município, mesmo que ele apareça em apenas uma das fontes. |
+| `gld_dim_uf` | Cadastro das 27 Unidades Federativas, com identificador numérico único |
+| `gld_dim_classificacao_capag` | Cadastro das classificações CAPAG (A, B, C, D) com suas descrições por extenso |
 
 #### Fatos (3 tabelas)
 | Modelo | Descrição | Partição | Cluster |
 | --- | --- | --- | --- |
-| `gld_fato_indicadores_capag` | Indicadores CAPAG por município/ano com FKs para dimensões | ano_base (range 2015–2030) | uf_id, classificacao_capag_id |
-| `gld_fato_pib_municipal` | PIB com taxa de crescimento YoY via `LAG()` + `SAFE_DIVIDE` | ano (range 2002–2030) | uf_id |
-| `gld_fato_risco_fiscal` | **MODELO PRINCIPAL**: cruza CAPAG × PIB, score 0–100, classificação de risco, faixa populacional | ano_base (range 2015–2030) | classificacao_risco, uf |
+| `gld_fato_indicadores_capag` | Indicadores CAPAG por município/ano, com chaves estrangeiras (FKs) que conectam às tabelas de dimensão (UF e classificação) | ano_base (range 2015–2030) | uf_id, classificacao_capag_id |
+| `gld_fato_pib_municipal` | PIB de cada município com cálculo da taxa de crescimento ano a ano (Year over Year), comparando o PIB atual com o do ano anterior | ano (range 2002–2030) | uf_id |
+| `gld_fato_risco_fiscal` | **MODELO PRINCIPAL**: cruza dados de CAPAG com PIB, calcula o score de risco fiscal (0–100), classifica o nível de risco e categoriza por faixa populacional | ano_base (range 2015–2030) | classificacao_risco, uf |
 
 #### Reports (4 tabelas pré-calculadas para Metabase)
+
+Estas tabelas são versões pré-calculadas e otimizadas para consumo direto pelos dashboards do Metabase, evitando que consultas complexas sejam executadas a cada visualização:
+
 | Modelo | Finalidade |
 | --- | --- |
-| `gld_report_risco_fiscal_municipal` | Visão detalhada por município: score, classificação, indicadores, PIB |
-| `gld_report_tendencia_anual` | Evolução YoY com self-join: variação de score e tendência (MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO) |
-| `gld_report_capag_vs_pib` | Correlação CAPAG × PIB — apenas municípios com PIB disponível |
-| `gld_report_agregacao_estadual` | Visão consolidada por estado: totais, médias, % risco alto, PIB do estado |
+| `gld_report_risco_fiscal_municipal` | Visão detalhada por município: score, classificação, indicadores e PIB |
+| `gld_report_tendencia_anual` | Evolução ano a ano: compara o score de cada município com o ano anterior e classifica a tendência (MELHORIA, PIORA, ESTAVEL ou SEM_HISTORICO) |
+| `gld_report_capag_vs_pib` | Correlação entre classificação CAPAG e PIB — inclui apenas municípios que possuem dados de PIB |
+| `gld_report_agregacao_estadual` | Visão consolidada por estado: total de municípios, score médio, percentual em risco alto e PIB total do estado |
 
 #### Insights (tabela gerada por Python)
 | Modelo | Descrição |
@@ -344,10 +349,13 @@ O score combina dois componentes independentes. Quando apenas um componente est�
 | Crescimento PIB | 0–30 pts | ≥10%=30, ≥5%=24, ≥2%=18, ≥0%=12, <0%=6, nulo/sem PIB=0 |
 
 **Comportamento adaptativo do score:**
-- **CAPAG + PIB disponíveis** → score = score_capag_base + score_crescimento_pib (0–100)
-- **Apenas CAPAG** → score reescalado: `round(score_capag_base × 100 / 70)` (0–100)
-- **Apenas PIB** → score reescalado: `round(score_crescimento_pib × 100 / 30)` (0–100)
-- **Nenhum** → score = NULL → classificação = INDETERMINADO
+
+O score se adapta à disponibilidade de dados de cada município:
+
+- **Ambos disponíveis (CAPAG + PIB):** o score é a soma direta dos dois componentes, variando de 0 a 100.
+- **Apenas CAPAG disponível:** o score do CAPAG (que vai até 70) é reescalado proporcionalmente para a faixa de 0 a 100, permitindo uma classificação mesmo sem dados de PIB.
+- **Apenas PIB disponível:** o score do PIB (que vai até 30) é reescalado proporcionalmente para a faixa de 0 a 100.
+- **Nenhum disponível:** o município recebe classificação INDETERMINADO, indicando ausência de dados suficientes para avaliação.
 
 | Classificação | Score |
 | --- | --- |
@@ -357,17 +365,13 @@ O score combina dois componentes independentes. Quando apenas um componente est�
 | CRÍTICO | < 36 |
 | INDETERMINADO | NULL (sem dados) |
 
-**Campos adicionais no modelo:**
-- `faixa_populacao`: categoriza o porte do município — Pequeno (< 20k), Médio (20k–100k), Grande (100k–500k), Metrópole (> 500k)
-- `tem_pib`: flag booleana que indica se o município tem dados de PIB para o ano
-
 ---
 
 ## 5. Pipeline de Dados
 
 ### DAG principal: `capag`
 
-**Arquivo:** `dags/capag.py` (~400 linhas)
+**Arquivo:** `dags/capag.py`
 
 **Tags:** `capag`, `pib`, `risco_fiscal`
 
@@ -383,38 +387,43 @@ O score combina dois componentes independentes. Quando apenas um componente est�
    - `upload_cidades_to_gcs` → gs://bruno_dm/raw/cidades.csv
    - `upload_pib_to_gcs` → gs://bruno_dm/raw/pib_municipal.csv
 
-3. **Verificação de datasets** no BigQuery: capag, cidades, pib, bronze, silver, gold (já provisionados pelo Terraform — a DAG apenas garante que existem como fallback idempotente)
+3. **Verificação de datasets** no BigQuery: verifica se os 6 datasets (capag, cidades, pib, bronze, silver, gold) existem no BigQuery. Eles já foram criados previamente pelo Terraform, mas essa verificação serve como garantia adicional — caso algum dataset não exista por qualquer motivo, ele é criado automaticamente.
 
-4. **Carga raw** (GCS → BigQuery, `if_exists='replace'`)
+4. **Carga raw** (GCS → BigQuery) — os arquivos CSV do GCS são carregados nas tabelas brutas do BigQuery, substituindo completamente os dados anteriores a cada execução
    - capag_brasil, cidades_brasil, pib_municipal
 
-5. **Bronze** → DbtTaskGroup (models/bronze — 3 views)
+5. **Bronze** → Executa os modelos dbt da camada Bronze via DbtTaskGroup (um grupo de tasks do Airflow que executa automaticamente cada modelo dbt como uma task separada). Resultado: 3 views no BigQuery.
 
-6. **dbt test bronze** → via `@task.external_python` no dbt_venv
+6. **Testes Bronze** → Executa os testes de qualidade dbt sobre os dados Bronze. Os testes rodam em um ambiente Python isolado dentro do container (dbt_venv), garantindo que as dependências do dbt não conflitem com as do Airflow.
 
-7. **Silver** → DbtTaskGroup (models/silver — 5 tabelas)
+7. **Silver** → Executa os modelos dbt da camada Silver via DbtTaskGroup. Resultado: 5 tabelas limpas e tipadas.
 
-8. **dbt test silver** → via `@task.external_python` no dbt_venv
+8. **Testes Silver** → Executa os testes de qualidade dbt sobre os dados Silver.
 
-9. **Gold** → DbtTaskGroup (models/gold — 10 tabelas)
+9. **Gold** → Executa os modelos dbt da camada Gold via DbtTaskGroup. Resultado: 10 tabelas de negócio (dimensões, fatos e reports).
 
-10. **dbt test gold** → via `@task.external_python` no dbt_venv
+10. **Testes Gold** → Executa os testes de qualidade dbt sobre os dados Gold.
 
-11. **Insights automáticos** → `generate_all_insights()` → salva em gold.insights_risco_fiscal
+11. **Insights automáticos** → Executa o script Python `generate_all_insights()`, que analisa os dados da camada Gold e gera narrativas em linguagem natural, salvando o resultado na tabela `gold.insights_risco_fiscal`.
 
-**Encadeamento:** `chain(bronze, dbt_test_bronze, silver, dbt_test_silver, gold, dbt_test_gold, generate_insights)`  
-Se qualquer teste falhar com `severity: error`, as etapas seguintes não executam.
+**Encadeamento sequencial com bloqueio por falha:**
+
+As etapas são executadas em sequência obrigatória: Bronze → Testes Bronze → Silver → Testes Silver → Gold → Testes Gold → Insights. Se qualquer teste de qualidade falhar com severidade `error`, o pipeline é interrompido e as etapas seguintes **não executam**, evitando que dados incorretos se propaguem para as camadas seguintes.
 
 ---
 
-## 6. Validação de Qualidade (dbt tests)
+## 6. Validação de Qualidade
 
-A validação de qualidade dos dados é feita com **dbt tests nativos**, executados após cada camada do pipeline. Os testes seguem uma política de severidade mista:
+A validação de qualidade dos dados é feita com **dbt tests nativos**, executados automaticamente após cada camada do pipeline (Bronze, Silver e Gold). Os testes seguem uma política de severidade em dois níveis:
 
-- **`severity: error`** (bloqueia o pipeline) → Problemas críticos que indicam falha na ingestão ou transformação
-- **`severity: warn`** (apenas alerta no log) → Problemas de qualidade que não impedem o uso dos dados
+- **Severidade `error` (bloqueia o pipeline):** indica problemas críticos — por exemplo, tabelas vazias ou campos obrigatórios nulos. Quando um teste desse tipo falha, o pipeline é interrompido e as camadas seguintes não são processadas, evitando que dados corrompidos se propaguem.
+- **Severidade `warn` (apenas alerta):** indica problemas de qualidade que merecem atenção, mas não impedem o uso dos dados — por exemplo, um valor de PIB negativo ou uma UF não reconhecida. O pipeline continua normalmente, e o alerta fica registrado nos logs para investigação posterior.
 
 ### Testes por camada
+
+Os testes são de dois tipos:
+- **Generic:** testes reutilizáveis do dbt, configurados diretamente no YAML (como `not_null`, `unique`, `accepted_values`, `relationships`). Basta declarar qual coluna e qual validação, sem escrever SQL.
+- **Singular SQL:** testes escritos como queries SQL customizadas em arquivos `.sql` separados (pasta `tests/`), usados para validações específicas que os testes genéricos não cobrem (ex.: verificar se uma tabela tem ao menos 1 registro).
 
 **Bronze** (dados brutos — `_bronze__models.yml`):
 | Teste | Tipo | Severidade |
@@ -429,7 +438,7 @@ A validação de qualidade dos dados é feita com **dbt tests nativos**, executa
 | Teste | Tipo | Severidade |
 | --- | --- | --- |
 | Tabelas CAPAG e PIB não-vazias | Singular SQL | error |
-| Chaves surrogadas (capag_sk, pib_sk) únicas e não-nulas | Generic | error |
+| Chaves (capag_sk, pib_sk) únicas e não-nulas | Generic | error |
 | cod_ibge, ano_base, uf not null | Generic | error |
 | uf_id, classificacao_capag_id unique e not null (dims) | Generic | error |
 | UF válida (27 estados) | Generic (accepted_values) | warn |
@@ -450,32 +459,11 @@ A validação de qualidade dos dados é feita com **dbt tests nativos**, executa
 | PIB ≥ 0 (fato_pib_municipal) | Generic (accepted_range) | warn |
 | Tendência válida (MELHORIA/PIORA/ESTAVEL/SEM_HISTORICO) | Generic (accepted_values) | warn |
 
-### Source Freshness
-
-Configurado em `sources.yml` para detecção automática de dados obsoletos:
-- **CAPAG**: warn após 120 dias, error após 180 dias (publicação quadrimestral)
-- **PIB**: warn após 365 dias, error após 450 dias (publicação anual com defasagem ~2 anos)
-- Executado via `dbt source freshness`
-
-### Por que dbt tests (e não SODA)?
-
-O projeto utilizava anteriormente o **SODA** para validação de qualidade. A migração para **dbt tests** foi motivada por:
-
-| Critério | SODA | dbt tests |
-| --- | --- | --- |
-| Custo | Cloud pago (~US$ 300+/mês) | 100% gratuito |
-| Infraestrutura | venv separado no Docker | Mesmo ambiente dbt |
-| Configuração | Credenciais + API keys extras | Zero config extra |
-| Integração | Ferramenta externa ao pipeline | Nativo no dbt, roda entre camadas |
-| Imagem Docker | Mais pesada (soda_venv) | Mais leve |
-
 ---
 
 ## 7. Insights Automáticos
 
-**Arquivo:** `include/insights/generate_insights.py`
-
-Gera **6 tipos de insights** em linguagem natural, conecta diretamente no BigQuery, e salva o resultado na tabela `gold.insights_risco_fiscal` (WRITE_TRUNCATE — recria a cada execução):
+Gera **6 tipos de insights** em linguagem natural, consultando diretamente as tabelas da camada Gold no BigQuery. O resultado é salvo na tabela `gold.insights_risco_fiscal`, que é completamente recriada a cada execução (os insights anteriores são substituídos pelos mais recentes):
 
 | Tipo | Prioridade | Insight |
 | --- | --- | --- |
@@ -483,16 +471,14 @@ Gera **6 tipos de insights** em linguagem natural, conecta diretamente no BigQue
 | `alerta_risco` | 2 | Top 10 municípios em situação CRÍTICA (menor score) |
 | `destaque_positivo` | 3 | Top 10 municípios com melhor saúde fiscal (maior score, classificação BAIXO) |
 | `analise_regional` | 4 | Top 10 estados com maior % de municípios em risco alto (ELEVADO + CRÍTICO) |
-| `tendencia` | 5 | Evolução YoY: quantos municípios melhoraram vs pioraram |
+| `tendencia` | 5 | Evolução ano a ano: quantos municípios melhoraram vs pioraram em relação ao ano anterior |
 | `correlacao` | 6 | Análise de risco por faixa populacional: % em risco crítico por porte |
-
-Cada insight contém: `titulo`, `narrativa`, `metrica_chave`, `valor_metrica`, `ano_base`, `gerado_em`.
 
 ---
 
 ## 8. Dashboards no Metabase
 
-O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e consome as tabelas do dataset `gold` no BigQuery. O Metabase já sobe automaticamente junto com o Airflow ao executar `astro dev start`.
+O **Metabase** é a ferramenta de visualização de dados utilizada neste projeto. Ele roda localmente como um container Docker na porta 3000 e se conecta diretamente ao BigQuery para consumir as tabelas da camada Gold. O Metabase já é iniciado automaticamente junto com o Airflow ao executar o comando `astro dev start` — não é necessário instalar ou configurar nada separadamente.
 
 > **Todas as queries SQL dos dashboards estão documentadas em [`include/metabase-data/queries_metabase.sql`](include/metabase-data/queries_metabase.sql)**, com comentários sobre o tipo de visualização e filtros recomendados para cada card.
 
@@ -522,39 +508,48 @@ O Metabase roda em Docker (porta 3000) via `docker-compose.override.yml` e conso
    - Tabelas detalhadas → parte inferior
 
 ### Dashboard 1: Painel de Risco Fiscal Municipal
+
+![Dashboard Risco Fiscal](imagens/dashboard_risco_fiscal.png)
+
 - **Fonte:** `gold.gld_report_risco_fiscal_municipal`
 - **Filtros:** UF, Ano, Classificação de Risco, Faixa Populacional
 - **Cards:**
-  - Distribuição por risco (pizza/donut) — query 1.1
+  - Distribuição por risco (pizza) — query 1.1
   - Score médio nacional (gauge 0–100) — query 1.2
   - Top 10 maior risco (tabela) — query 1.3
   - Top 10 menor risco (tabela) — query 1.4
   - Busca por município individual (tabela) — query 1.5
 
 ### Dashboard 2: Tendências Anuais
+
+![Dashboard Tendências](imagens/dashboard_tendencias.png)
+
 - **Fonte:** `gold.gld_report_tendencia_anual`
 - **Cards:**
   - Evolução do score médio por ano (gráfico de linha) — query 2.1
   - Melhorias vs Pioras por ano (barras empilhadas) — query 2.2
-  - Heatmap score médio por UF (pivot table) — query 2.3
+  - Heatmap score médio por UF — query 2.3
 
 ### Dashboard 3: Visão Estadual — PIB × Score
+
+![Dashboard Visão Estadual](imagens/dashboard_visao_estadual.png)
+
 - **Fonte:** `gold.gld_report_agregacao_estadual`
 - **Cards:**
   - % municípios em risco alto/crítico por UF (barras horizontais) — query 3.1
   - PIB total do estado vs Score médio (scatter plot) — query 3.2
 
-### Dashboard 4: CAPAG vs PIB
-- **Fonte:** `gold.gld_report_capag_vs_pib`
-- **Cards:** Scatter PIB × Score, Risco médio por faixa populacional, Endividamento vs PIB, Comparativo por classificação CAPAG
+### Dashboard 4: Insights Automáticos
 
-### Dashboard 5: Insights Automáticos
+![Dashboard Insights](imagens/dashboard_insights.png)
+
 - **Fonte:** `gold.insights_risco_fiscal`
-- **Cards:** Narrativas automáticas ordenadas por prioridade (tabela formatada) — query 4.1
+- **Card:** 
+  - Narrativas automáticas ordenadas por prioridade (tabela formatada) — query 4.1
 
 ---
 
-## 9. Infraestrutura como Código (Terraform)
+## 9. Infraestrutura como Código
 
 ### Por que Terraform?
 
@@ -565,7 +560,7 @@ Antes do Terraform, o bucket GCS e os datasets BigQuery eram criados **manualmen
 | Infra criada manualmente, sem registro do que foi feito | Código versionado no Git — toda mudança é rastreável |
 | Impossível recriar o ambiente de forma consistente | `terraform apply` recria tudo identicamente em qualquer projeto GCP |
 | Risco de esquecer recursos ao migrar de projeto | Todos os recursos declarados em um único lugar (`main.tf`) |
-| Sem lifecycle policies no GCS (custo desnecessário) | Nearline automático após 90 dias + deleção de versões antigas |
+| Sem lifecycle policies no GCS | Nearline automático após 90 dias + deleção de versões antigas (boas práticas de governança) |
 | Datasets criados sem labels ou padrão | Labels padronizados por camada (`raw`, `bronze`, `silver`, `gold`) |
 | Mudanças de infra sem revisão | CI/CD: `terraform plan` em PRs, `apply` apenas em merge na main |
 
@@ -583,10 +578,12 @@ Toda a infraestrutura GCP é provisionada e versionada via **Terraform** no dire
 | `google_bigquery_dataset.silver` | Dataset Silver — dados limpos e tipados |
 | `google_bigquery_dataset.gold` | Dataset Gold — modelos dimensionais e reports |
 
-### Lifecycle policies (GCS)
+### Políticas de ciclo de vida (GCS)
 
-- **Nearline após 90 dias**: dados raw acessados com menos frequência são movidos automaticamente para storage mais barato
-- **Deleção após 365 dias**: versões arquivadas antigas são removidas (mantém as 3 mais recentes)
+O Google Cloud Storage cobra pelo armazenamento de dados (embora o volume deste projeto seja pequeno e os custos sejam mínimos). Para seguir boas práticas de governança e otimizar custos em cenários de maior escala, foram configuradas regras automáticas de ciclo de vida:
+
+- **Migração automática após 90 dias:** arquivos que não são acessados com frequência são movidos automaticamente para uma classe de armazenamento mais econômica (Nearline), sem que nenhuma ação manual seja necessária.
+- **Limpeza automática após 365 dias:** versões antigas dos arquivos são removidas automaticamente, mantendo apenas as 3 versões mais recentes para economizar espaço.
 
 ### Estrutura dos arquivos
 
@@ -607,71 +604,58 @@ make infra-apply    # terraform apply (aplica no GCP)
 
 ---
 
-## 10. CI/CD (GitHub Actions)
+## 10. CI/CD
 
 ### Por que CI/CD?
 
 Sem automação, erros em SQL, Python ou infraestrutura só seriam detectados **em produção** (ao rodar a DAG ou ao aplicar Terraform manualmente). O CI/CD garante:
 
-- **Detecção precoce**: sintaxe SQL quebrada, lint de Python e build Docker são validados a cada push, antes de chegar ao Airflow
-- **Revisão de infra**: mudanças em Terraform geram `plan` automático no PR, permitindo revisão antes do apply
-- **Deploy seguro**: Terraform só aplica mudanças no GCP após merge na main (nunca direto de uma branch)
-- **Padronização**: todo código passa pelos mesmos checks, independente de quem fez o commit
+- **Detecção precoce de erros:** a cada envio de código ao repositório, o sistema verifica automaticamente se os arquivos SQL estão corretos, se o código Python segue boas práticas e se a imagem Docker compila sem problemas — tudo isso antes de o código chegar ao Airflow em produção.
+- **Revisão de infraestrutura:** quando alguém propõe mudanças nos arquivos de infraestrutura, o sistema gera automaticamente uma prévia do que seria alterado no Google Cloud, permitindo que a equipe revise antes de aprovar.
+- **Deploy seguro:** as mudanças de infraestrutura só são aplicadas no Google Cloud após serem aprovadas e incorporadas à branch principal do repositório (nunca diretamente de uma branch de desenvolvimento).
+- **Padronização:** todo código enviado ao repositório passa pelas mesmas verificações automáticas, independentemente de quem o escreveu.
 
 O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflows/`:
 
 ### Workflow 1: CI - Pipeline de Dados (`ci.yml`)
 
-**Dispara em:** push e PR na `main` (ignora `infra/`, `*.md`, `imagens/`)
+**Dispara em:** a cada envio de código ou abertura de Pull Request na branch `main` (ignora alterações em arquivos de infraestrutura, documentação e imagens).
 
-**Job 1: dbt compile & lint**
-| Step | O que faz |
-| --- | --- |
-| Checkout | Clona o repositório |
-| Setup Python 3.11 | Instala Python |
-| Instalar dbt-bigquery | Instala dbt 1.5.3 |
-| dbt deps | Instala dbt packages (dbt_utils) |
-| dbt parse | Valida sintaxe SQL e YAML sem conexão com BigQuery |
+Este workflow executa **3 verificações independentes em paralelo:**
 
-**Job 2: Docker build**
-| Step | O que faz |
-| --- | --- |
-| Checkout | Clona o repositório |
-| Docker build | Builda a imagem Docker para validar que o Dockerfile compila sem erros |
+**Verificação 1 — Validação SQL (dbt):**
+Instala o dbt e verifica se todos os arquivos SQL e YAML dos modelos de dados estão com sintaxe correta, sem precisar se conectar ao BigQuery.
 
-**Job 3: Python lint**
-| Step | O que faz |
-| --- | --- |
-| Checkout | Clona o repositório |
-| Setup Python 3.11 | Instala Python |
-| Instalar flake8 | Instala o linter |
-| flake8 | Valida estilo e erros nos scripts de download, insights e DAGs |
+**Verificação 2 — Build Docker:**
+Constrói a imagem Docker do projeto para validar que o Dockerfile e todas as dependências instalam corretamente, sem erros.
+
+**Verificação 3 — Qualidade do código Python:**
+Executa o flake8 (uma ferramenta de análise estática) sobre os scripts Python do projeto, verificando se seguem boas práticas de estilo e se não possuem erros comuns de programação.
 
 ### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
 
-**Dispara em:** push e PR na `main` (apenas quando `infra/**` muda)
+**Dispara em:** a cada envio de código ou abertura de Pull Request na branch `main`, **somente quando há alterações nos arquivos de infraestrutura** (pasta `infra/`).
 
-| Step | O que faz |
-| --- | --- |
-| Setup Terraform 1.7.0 | Instala Terraform |
-| Autenticar no GCP | Usa `secrets.GCP_SA_KEY` |
-| terraform init | Inicializa providers |
-| terraform fmt -check | Verifica formatação |
-| terraform validate | Valida configuração |
-| terraform plan | **Em PR**: mostra o que vai mudar (sem aplicar) |
-| terraform apply | **Em merge na main**: aplica as mudanças no GCP |
+Este workflow executa as seguintes etapas:
 
-### Secrets necessários
+1. **Instalação e autenticação:** instala o Terraform e autentica no Google Cloud usando a credencial armazenada nos segredos (secrets) do repositório.
+2. **Validação:** verifica se os arquivos de infraestrutura estão formatados corretamente e se a configuração é válida.
+3. **Prévia das mudanças (em Pull Request):** exibe um relatório detalhado do que será criado, alterado ou removido no Google Cloud, sem aplicar nada — permitindo revisão pela equipe.
+4. **Aplicação (após aprovação):** somente quando o código é incorporado à branch principal (merge), as mudanças são efetivamente aplicadas no Google Cloud.
+
+### Segredos do repositório (Secrets)
+
+Para que os workflows do **GitHub Actions** consigam acessar o Google Cloud automaticamente, é necessário configurar o seguinte segredo nas configurações do repositório GitHub (Settings → Secrets and variables → Actions):
 
 | Secret | Descrição |
 | --- | --- |
-| `GCP_SA_KEY` | JSON da Service Account com roles BigQuery Admin + Storage Admin |
+| `GCP_SA_KEY` | Conteúdo JSON da Service Account do Google Cloud, com permissões de administrador no BigQuery e no Cloud Storage |
+
+> **Nota:** este segredo é necessário **apenas para o CI/CD** (GitHub Actions). Para rodar o projeto localmente, basta ter o arquivo `include/gcp/service_account.json` configurado conforme descrito na [Seção 11 — Reprodução do Projeto](#11-reprodução-do-projeto). Se você não pretende usar o CI/CD, pode ignorar esta configuração.
 
 ---
 
 ## 11. Reprodução do Projeto
-
-> **Objetivo:** Qualquer pessoa deve conseguir clonar o repositório e reproduzir o projeto completo em outra máquina ou ambiente, seguindo os passos abaixo.
 
 ### Pré-requisitos
 
@@ -687,7 +671,7 @@ O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflo
 ### Passo 1: Clonar o repositório
 
 ```bash
-git clone https://github.com/<seu-usuario>/DataMaster_F1RST.git
+git clone https://github.com/camposbrets/DataMaster_F1RST.git
 cd DataMaster_F1RST
 ```
 
@@ -707,7 +691,7 @@ cd DataMaster_F1RST
    include/gcp/service_account.json
    ```
 
-> **Segurança:** O arquivo `service_account.json` está no `.gitignore` e **não deve ser commitado**. Cada pessoa que reproduzir o projeto deve gerar sua própria chave.
+> **Segurança:** O arquivo `service_account.json` está no `.gitignore`. Cada pessoa que reproduzir o projeto deve gerar sua própria chave.
 
 ### Passo 3: Ajustar Project ID e Bucket (se necessário)
 
@@ -764,7 +748,7 @@ Isso inicia todos os containers:
    - **Connection Id:** `gcp`
    - **Connection Type:** `Google Cloud`
    - **Keyfile Path:** `/usr/local/airflow/include/gcp/service_account.json`
-4. Clique **Save**
+4. Clique em **Save**
 
 ### Passo 7: Executar a DAG do pipeline
 
@@ -783,8 +767,6 @@ download_pib ─────→ upload_pib ────┘
                             ↓
 Bronze (3 views) → dbt test → Silver (5 tables) → dbt test → Gold (10 tables) → dbt test → Insights
 ```
-
-> A execução completa leva ~15–30 minutos na primeira vez (download de todas as fontes). Execuções subsequentes são incrementais (apenas anos novos).
 
 ### Passo 8: Configurar Metabase e criar dashboards
 
@@ -809,7 +791,7 @@ Após a DAG completar com sucesso, valide:
 | --- | --- |
 | Dados no BigQuery | Console GCP → BigQuery → datasets bronze/silver/gold |
 | Testes dbt ok | Airflow → logs das tasks `dbt_test_*` (0 failures) |
-| Insights gerados | BigQuery → `gold.insights_risco_fiscal` (6 linhas) |
+| Insights gerados | BigQuery → `gold.insights_risco_fiscal` |
 | Dashboards | Metabase → http://localhost:3000 |
 
 ### Resumo dos comandos principais (Makefile)
@@ -866,12 +848,9 @@ make infra-destroy
 ```
 DataMaster_F1RST/
 ├── dags/
-│   └── capag.py                           # DAG principal (~400 linhas)
+│   └── capag.py                           # DAG principal
 ├── include/
 │   ├── dataset/
-│   │   ├── CAPAG.csv                      # Dados CAPAG consolidados
-│   │   ├── cidades.csv                    # Cadastro de municípios
-│   │   ├── PIB_MUNICIPAL.csv              # PIB Municipal (IBGE SIDRA)
 │   │   ├── download_capag.py              # Download automático CAPAG (incremental)
 │   │   ├── download_cidades.py            # Download automático municípios (API IBGE)
 │   │   ├── download_pib.py                # Download automático PIB Municipal (incremental)
@@ -884,7 +863,7 @@ DataMaster_F1RST/
 │   │   ├── macros/
 │   │   │   └── generate_schema_name.sql   # Schema customizado por camada
 │   │   ├── models/
-│   │   │   ├── sources/sources.yml        # 3 fontes com freshness
+│   │   │   ├── sources/sources.yml        # 3 fontes de dados
 │   │   │   ├── bronze/                    # 3 views + _bronze__models.yml
 │   │   │   ├── silver/                    # 5 tabelas + _silver__models.yml
 │   │   │   └── gold/                      # 10 tabelas + _gold__models.yml
@@ -908,3 +887,63 @@ DataMaster_F1RST/
 ├── requirements.txt                       # Dependências Python
 └── README.md                              # Este arquivo
 ```
+
+---
+
+## 13. Melhorias Futuras e Considerações Finais
+
+### Melhorias propostas
+
+1. **Integração com modelos preditivos de risco:**
+   - Utilizar os dados históricos de score de risco fiscal para treinar modelos de machine learning capazes de prever a tendência futura de cada município, antecipando possíveis deteriorações fiscais antes que se tornem críticas.
+
+2. **Alertas e monitoramento proativo:**
+   - Implementar notificações automáticas (via Slack, e-mail ou Microsoft Teams) quando o pipeline detectar falhas, dados desatualizados ou municípios que tenham migrado para uma faixa de risco mais elevada entre uma execução e outra.
+
+3. **Expansão das visualizações e análises:**
+   - Adicionar mais tipos de visualizações no Metabase para aprofundar os insights, como mapas geográficos de calor por estado, análises temporais mais granulares e comparativos entre municípios de mesmo porte populacional.
+   - Incluir filtros dinâmicos adicionais nos dashboards para permitir análises mais detalhadas e personalizadas.
+
+4. **Inclusão de novas fontes de dados:**
+   - Integrar outras fontes (como dados de receita tributária, transferências constitucionais e índices de desenvolvimento humano) para enriquecer o score de risco e gerar uma visão ainda mais completa da saúde fiscal municipal.
+
+### Considerações finais
+
+#### Evolução do projeto
+
+Este projeto é uma evolução significativa do case anterior localizado no seguinte GitHub: https://github.com/BretsCampos/DATA_MASTER. 
+As mudanças tiveram como objetivo transformar o pipeline original em uma solução robusta, escalável e alinhada com as boas práticas de engenharia de dados adotadas pelo mercado. A tabela abaixo resume as principais diferenças:
+
+| Aspecto | Versão anterior | Versão atual |
+| --- | --- | --- |
+| **Fontes de dados** | 1 (CAPAG) | 3 (CAPAG + PIB Municipal + Cidades IBGE) |
+| **Arquitetura dbt** | 2 camadas genéricas (transform + report) | 3 camadas Medalhão (Bronze + Silver + Gold) |
+| **Modelos dbt** | 4 modelos | 18 modelos ativos (3 bronze + 5 silver + 10 gold) |
+| **Testes de qualidade** | SODA (ferramenta externa, cloud pago) | dbt tests nativos (gratuito, integrado ao pipeline) |
+| **DAG Airflow** | Sem retries | Com retries, timeouts, callback e download incremental |
+| **Download de dados** | CSVs estáticos (download manual) | Automatizado via API com lógica incremental |
+| **Score de risco** | Não existia | Score composto 0–100 com 5 classificações |
+| **Insights automáticos** | Não existia | 6 tipos de narrativas em linguagem natural |
+| **Infraestrutura** | Manual (Console GCP) | Terraform (Infrastructure as Code) |
+| **CI/CD** | Não existia | GitHub Actions (validação dbt + deploy Terraform) |
+| **Makefile** | Não existia | Atalhos para todos os comandos do projeto |
+
+**Principais melhorias:**
+
+1. **Arquitetura Medalhão:** a versão anterior usava 2 camadas genéricas em um único schema. A versão atual adota o padrão Medalhão (Bronze → Silver → Gold) com schemas separados no BigQuery, permitindo rastreabilidade completa — se um dado está errado na camada Gold, é possível rastrear se o problema veio da Bronze (dado bruto) ou da Silver (transformação).
+
+2. **Análise multidimensional com PIB:** a versão anterior analisava apenas dados CAPAG isoladamente. A integração do PIB Municipal do IBGE permite cruzar saúde fiscal com contexto econômico — um município pode ter CAPAG "A", mas PIB estagnado, indicando risco futuro que não seria visível com uma análise unidimensional.
+
+3. **Qualidade integrada ao pipeline:** a versão anterior usava o SODA como ferramenta externa de qualidade, que adicionava um ambiente virtualizado separado no Docker, credenciais extras e uma dependência paga (~US$ 300+/mês em ambiente cloud). A migração para dbt tests nativos eliminou essa dependência e integrou a qualidade diretamente ao fluxo de transformação.
+
+4. **Download automatizado:** os CSVs estáticos da versão anterior exigiam download manual. Agora, 3 scripts consomem APIs públicas oficiais (dados.gov.br, SIDRA/IBGE, Localidades/IBGE) com lógica incremental — antes de baixar, verificam quais anos já existem e baixam apenas dados novos.
+
+5. **Infraestrutura como Código:** o bucket GCS e os datasets BigQuery eram criados manualmente pelo Console do GCP. Com Terraform, toda a infraestrutura é provisionada com um único comando (`terraform apply`), versionada no Git e reprodutível em qualquer projeto GCP.
+
+---
+
+Este projeto demonstrou como é possível transformar dados públicos brutos — disponibilizados pelo Tesouro Nacional (CAPAG) e pelo IBGE (PIB Municipal) — em informações analíticas de alto valor por meio de um pipeline de dados moderno e bem estruturado.
+
+A utilização de tecnologias como **BigQuery**, **dbt**, **Airflow**, **Terraform** e **Metabase** permitiu a criação de um sistema robusto, escalável e reprodutível para análise da saúde fiscal dos municípios brasileiros. A arquitetura Medalhão garantiu rastreabilidade e confiabilidade dos dados em cada etapa do processamento.
+
+Através deste trabalho, foi possível compreender em profundidade o processo CAPAG e sua importância como ferramenta de avaliação fiscal, essencial para promover a responsabilidade fiscal e contribuir para a estabilidade econômica do país. As melhorias propostas acima visam aumentar a eficiência, a profundidade das análises e o valor entregue aos usuários finais.
