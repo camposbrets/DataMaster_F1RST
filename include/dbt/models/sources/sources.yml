@@ -4,10 +4,6 @@ sources:
   - name: capag
     database: projeto-data-master
     description: "Dados CAPAG - Capacidade de Pagamento dos Municipios (Tesouro Nacional)"
-    freshness:
-      warn_after: {count: 120, period: day}
-      error_after: {count: 180, period: day}
-    loaded_at_field: _PARTITIONTIME
     tables:
       - name: capag_brasil
         description: >
@@ -27,10 +23,6 @@ sources:
   - name: pib
     database: projeto-data-master
     description: "PIB Municipal - Produto Interno Bruto dos Municipios (IBGE)"
-    freshness:
-      warn_after: {count: 365, period: day}
-      error_after: {count: 450, period: day}
-    loaded_at_field: _PARTITIONTIME
     tables:
       - name: pib_municipal
         description: >

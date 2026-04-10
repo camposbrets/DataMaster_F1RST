@@ -3,18 +3,23 @@
 .DS_Store
 airflow_settings.yaml
 __pycache__/
-astro
-.venv
+.astro/
+.venv/
 airflow-webserver.pid
 webserver_config.py
 airflow.cfg
 airflow.db
+
+# GCP credentials
 include/gcp/service_account.json
+
+# Metabase data
 include/metabase-data/
 
 # dbt artifacts
 include/dbt/logs/
 include/dbt/target/
+include/dbt/.user.yml
 
 # Terraform
 infra/.terraform/
@@ -22,3 +27,6 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/.terraform.lock.hcl
 infra/terraform.tfvars
+
+# IDE
+.idea/
