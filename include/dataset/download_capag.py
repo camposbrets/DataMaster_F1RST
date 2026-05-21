@@ -7,6 +7,8 @@ e consolida todos em um unico CSV no formato padrao do projeto.
 """
 
 import requests
+import socket
+import urllib3.util.connection as urllib3_cn
 import pandas as pd
 import openpyxl
 import re
@@ -19,9 +21,42 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-API_URL = "https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios"
+def _force_ipv4():
+    """Força conexões HTTP para usar IPv4, evitando erros de timeout em IPv6."""
+
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+
+#API_URL = "https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios"
+
+#API_URL = "https://dados.gov.br/dados/api/publico/conjuntos-dados/capag-municipios"
+
+API_URL = ("https://www.tesourotransparente.gov.br/ckan/api/3/action/package_show?id=capag-municipios")
+
+API_KEY_ENV_VARS = ("DADOS_GOV_API_KEY", "CHAVE_API_DADOS_ABERTOS")
+
 OUTPUT_DIR = Path(__file__).parent
 OUTPUT_FILE = OUTPUT_DIR / "CAPAG.csv"
+
+def _get_api_key():
+    """Busca chave de API em variáveis de ambiente."""
+    for var in API_KEY_ENV_VARS:
+        key = os.environ.get(var)
+        if key:
+            return key.strip()
+    return None
+
+def _build_headers():
+    """Constrói cabeçalhos HTTP, incluindo chave de API se disponível."""
+    headers = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"}
+    api_key = _get_api_key()
+    if api_key:
+        headers["chave-api-dados-abertos"] = api_key
+    return headers
 
 TARGET_COLUMNS = [
     'INSTITUICAO', 'COD_IBGE', 'UF', 'POPULACAO',
@@ -71,10 +106,26 @@ COLUMN_MAP = {
 
 def fetch_resources():
     """Busca a lista de recursos da API do dados.gov.br."""
-    response = requests.get(API_URL, timeout=30)
-    response.raise_for_status()
-    data = response.json()
-    return data.get('resources', [])
+    #response = _get_with_retry(API_URL, timeout=30)
+
+    headers = _build_headers()
+    #if "chave-api-dados-abertos" not in headers:
+    #    logger.warning(
+    #        "Nenhuma chave de API encontrada para dados.gov.br. "
+    #        "Recomenda-se definir a variável de ambiente DADOS_GOV_API_KEY "
+    #        "com uma chave válida para evitar bloqueios por excesso de requisições."
+    #    )
+    response = requests.get(API_URL, headers=headers, timeout=30)
+    response.raise_for_status()  
+    #data = response.json()
+    #return data.get('resources', [])
+    payload = response.json()
+
+    if not payload.get('success',False):
+        raise RuntimeError(
+            f"CKAN retornou success=False para {API_URL}: {payload.get('error')}"
+        )
+    return payload.get('result', {}).get('resources', [])
 
 
 def extract_year(title):
@@ -243,6 +294,8 @@ def download_and_merge(output_path=None):
     Na primeira execucao, baixa todos os anos disponiveis.
     Nas execucoes seguintes, baixa apenas anos novos e faz append ao CSV existente.
     """
+    _force_ipv4()
+
     if output_path is None:
         output_path = OUTPUT_FILE
 
