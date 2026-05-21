@@ -21,28 +21,35 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
 def _force_ipv4():
     """Força conexões HTTP para usar IPv4, evitando erros de timeout em IPv6."""
 
     urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
-#API_URL = "https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios"
+
+# API_URL = "https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios"
 
 API_URL = ("https://www.tesourotransparente.gov.br/ckan/api/3/action/package_show?id=capag-municipios")
 
 OUTPUT_DIR = Path(__file__).parent
 OUTPUT_FILE = OUTPUT_DIR / "CAPAG.csv"
 
+
 def _build_headers():
     """Constrói cabeçalhos HTTP, incluindo chave de API se disponível."""
-    headers = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    }
 
     return headers
+
 
 TARGET_COLUMNS = [
     'INSTITUICAO', 'COD_IBGE', 'UF', 'POPULACAO',
@@ -92,22 +99,22 @@ COLUMN_MAP = {
 
 def fetch_resources():
     """Busca a lista de recursos da API do tesourotransparente.gov.br."""
-    #response = _get_with_retry(API_URL, timeout=30)
+    # response = _get_with_retry(API_URL, timeout=30)
 
     headers = _build_headers()
-    #if "chave-api-dados-abertos" not in headers:
-    #    logger.warning(
-    #        "Nenhuma chave de API encontrada para tesourotransparente.gov.br. "
-    #        "Recomenda-se definir a variável de ambiente TESOUROTRANSPARENTE_API_KEY "
-    #        "com uma chave válida para evitar bloqueios por excesso de requisições."
-    #    )
+    # if "chave-api-dados-abertos" not in headers:
+    #     logger.warning(
+    #         "Nenhuma chave de API encontrada para tesourotransparente.gov.br. "
+    #         "Recomenda-se definir a variável de ambiente TESOUROTRANSPARENTE_API_KEY "
+    #         "com uma chave válida para evitar bloqueios por excesso de requisições."
+    #     )
     response = requests.get(API_URL, headers=headers, timeout=30)
-    response.raise_for_status()  
-    #data = response.json()
-    #return data.get('resources', [])
+    response.raise_for_status()
+    # data = response.json()
+    # return data.get('resources', [])
     payload = response.json()
 
-    if not payload.get('success',False):
+    if not payload.get('success', False):
         raise RuntimeError(
             f"CKAN retornou success=False para {API_URL}: {payload.get('error')}"
         )
