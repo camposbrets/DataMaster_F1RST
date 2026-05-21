@@ -69,7 +69,7 @@ Os dados são obtidos do **IBGE** (tabela SIDRA 5938), que publica o PIB de todo
                            │ provisiona
                            ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  dados.gov.br   │   │  IBGE / SIDRA   │   │ IBGE Localidades│
+│  Tesouro Transp.│   │  IBGE / SIDRA   │   │ IBGE Localidades│
 │  (CAPAG XLSX)   │   │  (PIB Municipal)│   │   (Municípios)  │
 └────────┬────────┘   └────────┬────────┘   └────────┬────────┘
          │ download            │ download            │ download
@@ -136,7 +136,7 @@ Para evitar reprocessamento desnecessário a cada execução, os scripts de down
 
 | Fonte | Origem | Frequência de atualização | Download |
 | --- | --- | --- | --- |
-| CAPAG | dados.gov.br (Tesouro Nacional) | Quadrimestral (a cada 4 meses) | Automático via API (XLSX → CSV) |
+| CAPAG | Tesouro Transparente (CKAN público) | Quadrimestral | Automático via API CKAN (XLSX → CSV) |
 | Cidades | IBGE API Localidades | Relativamente estático | Automático via API |
 | PIB Municipal | IBGE SIDRA (tabela 5938) | Anual | Automático via API SIDRA |
 
@@ -173,6 +173,12 @@ Para evitar reprocessamento desnecessário a cada execução, os scripts de down
 | Codigo | Código IBGE do município |
 | Nome | Nome do município |
 | UF | Sigla da UF |
+
+### Nota — fonte do CAPAG
+
+O **CAPAG é produzido pela Secretaria do Tesouro Nacional (STN)**, órgão responsável por avaliar a capacidade de pagamento dos entes subnacionais (atribuição vinculada ao processo de garantia da União para operações de crédito). O Tesouro publica os arquivos no portal **Tesouro Transparente** (`https://www.tesourotransparente.gov.br/ckan/dataset/capag-municipios`) via API CKAN padrão, sem necessidade de autenticação.
+
+Em versões anteriores deste projeto, o consumo era feito pelo **`dados.gov.br`**. Entre abril e maio de 2026 esse portal passou a exigir uma **chave de acesso** para qualquer chamada à sua API — inclusive nos endpoints que antes eram abertos ao público —, o que adicionava fricção operacional (cadastro de perfil Consumidor no portal gov.br, gestão de token, possíveis bloqueios por aprovação pendente). A migração para a API do próprio órgão produtor elimina essa dependência sem alterar o código de leitura do XLSX (mesmo formato, mesma estrutura de recursos CKAN).
 
 ---
 
@@ -378,7 +384,7 @@ O score se adapta à disponibilidade de dados de cada município:
 **Fluxo detalhado:**
 
 1. **Download automático** (3 tasks em paralelo, retries=2, timeout=30min cada)
-   - `download_capag_files()` → API dados.gov.br → XLSX → consolida em CAPAG.csv (incremental por ano)
+   - `download_capag_files()` → API CKAN do Tesouro Transparente → XLSX → consolida em CAPAG.csv (incremental por ano)
    - `download_pib_files()` → API SIDRA/IBGE tabela 5938 → PIB_MUNICIPAL.csv (incremental por ano)
    - `download_cidades_file()` → API IBGE Localidades → cidades.csv
 
@@ -693,6 +699,20 @@ cd DataMaster_F1RST
 
 > **Segurança:** O arquivo `service_account.json` está no `.gitignore`. Cada pessoa que reproduzir o projeto deve gerar sua própria chave.
 
+> **Antes de rodar o Terraform**, exporte a variável de ambiente `GOOGLE_APPLICATION_CREDENTIALS` apontando para o JSON da Service Account, na **mesma sessão de terminal** em que for executar o comando. Sem isso, o `terraform apply` (Passo 4) falha com erro de autenticação, porque o provider `google` do Terraform — assim como as bibliotecas `google-cloud-storage` e `google-cloud-bigquery` — procura a credencial nessa variável (Application Default Credentials).
+>
+> ```powershell
+> # Windows (PowerShell) — vale apenas para a sessão atual
+> $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\caminho\para\DataMaster_F1RST\include\gcp\service_account.json"
+> ```
+>
+> ```bash
+> # Linux/macOS
+> export GOOGLE_APPLICATION_CREDENTIALS="$HOME/DataMaster_F1RST/include/gcp/service_account.json"
+> ```
+>
+> Dentro do container Airflow (`astro dev start`) isso **não é necessário** — as tasks usam a Connection `gcp` configurada no [Passo 6](#passo-6-configurar-conexão-gcp-no-airflow).
+
 ### Passo 3: Ajustar Project ID e Bucket (se necessário)
 
 Se o seu Project ID for diferente de `projeto-data-master` ou o bucket for diferente de `bruno_dm`, altere nos arquivos:
@@ -715,11 +735,6 @@ make infra-plan
 
 # Aplica — cria o bucket GCS + 6 datasets BigQuery
 make infra-apply
-```
-
-Ou manualmente:
-```bash
-cd infra && terraform init && terraform plan && terraform apply
 ```
 
 **O que é criado automaticamente:**
@@ -839,7 +854,7 @@ make infra-destroy
 | **Metabase** | 0.50.24 | Dashboards interativos |
 | **Python** | — | Download automático, geração de insights |
 | **openpyxl** | — | Leitura de XLSX (CAPAG) |
-| **requests** | — | Chamadas HTTP às APIs (dados.gov.br, SIDRA, IBGE) |
+| **requests** | — | Chamadas HTTP às APIs (Tesouro Transparente/CKAN, SIDRA, IBGE) |
 | **google-cloud-storage** | — | Upload de CSVs e verificação incremental no GCS |
 | **Make** | — | Atalhos para comandos do projeto (`make infra-plan`, `make airflow-start`) |
 
@@ -927,6 +942,7 @@ As mudanças tiveram como objetivo transformar o pipeline original em uma soluç
 | **Infraestrutura** | Manual (Console GCP) | Terraform (Infrastructure as Code) |
 | **CI/CD** | Não existia | GitHub Actions (validação dbt + deploy Terraform) |
 | **Makefile** | Não existia | Atalhos para todos os comandos do projeto |
+| **Dashboards Metabase** | 1 dashboard com 4 cards de indicadores brutos (TOP 10 endividamento, poupança, liquidez e Nota A por UF) | 4 dashboards analíticos (Risco Fiscal Municipal, Tendências Anuais, Visão Estadual PIB × Score, Insights Automáticos) com filtros dinâmicos, score 0–100, narrativas e reports pré-calculados |
 
 **Principais melhorias:**
 
@@ -936,9 +952,11 @@ As mudanças tiveram como objetivo transformar o pipeline original em uma soluç
 
 3. **Qualidade integrada ao pipeline:** a versão anterior usava o SODA como ferramenta externa de qualidade, que adicionava um ambiente virtualizado separado no Docker, credenciais extras e uma dependência paga (~US$ 300+/mês em ambiente cloud). A migração para dbt tests nativos eliminou essa dependência e integrou a qualidade diretamente ao fluxo de transformação.
 
-4. **Download automatizado:** os CSVs estáticos da versão anterior exigiam download manual. Agora, 3 scripts consomem APIs públicas oficiais (dados.gov.br, SIDRA/IBGE, Localidades/IBGE) com lógica incremental — antes de baixar, verificam quais anos já existem e baixam apenas dados novos.
+4. **Download automatizado:** os CSVs estáticos da versão anterior exigiam download manual. Agora, 3 scripts consomem APIs públicas oficiais (Tesouro Transparente/STN, SIDRA/IBGE, Localidades/IBGE) com lógica incremental — antes de baixar, verificam quais anos já existem e baixam apenas dados novos.
 
 5. **Infraestrutura como Código:** o bucket GCS e os datasets BigQuery eram criados manualmente pelo Console do GCP. Com Terraform, toda a infraestrutura é provisionada com um único comando (`terraform apply`), versionada no Git e reprodutível em qualquer projeto GCP.
+
+6. **Camada de visualização repensada no Metabase:** a versão anterior entregava **um único dashboard** com 4 cards de indicadores brutos (TOP 10 endividamento, poupança corrente, liquidez e estados com mais cidades Nota A) — sem filtros, sem narrativa e consumindo diretamente das tabelas finais. A versão atual entrega **4 dashboards analíticos** consumindo reports pré-calculados na Gold, com **filtros dinâmicos**, **score composto 0–100** em vez de indicadores soltos, **drill-down** por município, **tendências YoY**, **scatter PIB × Score** por estado e um painel de **insights narrativos** ordenados por prioridade.
 
 ---
 
