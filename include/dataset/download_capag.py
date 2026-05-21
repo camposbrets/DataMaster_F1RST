@@ -1,6 +1,6 @@
 """
 Download automatico e consolidacao dos arquivos CAPAG Municipios
-do portal dados.gov.br.
+do portal tesourotransparente.gov.br.
 
 Para cada ano, baixa apenas o arquivo mais recente (quando ha multiplas versoes)
 e consolida todos em um unico CSV no formato padrao do projeto.
@@ -28,22 +28,10 @@ def _force_ipv4():
 
 #API_URL = "https://dados.gov.br/api/publico/conjuntos-dados/capag-municipios"
 
-#API_URL = "https://dados.gov.br/dados/api/publico/conjuntos-dados/capag-municipios"
-
 API_URL = ("https://www.tesourotransparente.gov.br/ckan/api/3/action/package_show?id=capag-municipios")
-
-API_KEY_ENV_VARS = ("DADOS_GOV_API_KEY", "CHAVE_API_DADOS_ABERTOS")
 
 OUTPUT_DIR = Path(__file__).parent
 OUTPUT_FILE = OUTPUT_DIR / "CAPAG.csv"
-
-def _get_api_key():
-    """Busca chave de API em variáveis de ambiente."""
-    for var in API_KEY_ENV_VARS:
-        key = os.environ.get(var)
-        if key:
-            return key.strip()
-    return None
 
 def _build_headers():
     """Constrói cabeçalhos HTTP, incluindo chave de API se disponível."""
@@ -53,9 +41,7 @@ def _build_headers():
     ),
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"}
-    api_key = _get_api_key()
-    if api_key:
-        headers["chave-api-dados-abertos"] = api_key
+
     return headers
 
 TARGET_COLUMNS = [
@@ -105,14 +91,14 @@ COLUMN_MAP = {
 
 
 def fetch_resources():
-    """Busca a lista de recursos da API do dados.gov.br."""
+    """Busca a lista de recursos da API do tesourotransparente.gov.br."""
     #response = _get_with_retry(API_URL, timeout=30)
 
     headers = _build_headers()
     #if "chave-api-dados-abertos" not in headers:
     #    logger.warning(
-    #        "Nenhuma chave de API encontrada para dados.gov.br. "
-    #        "Recomenda-se definir a variável de ambiente DADOS_GOV_API_KEY "
+    #        "Nenhuma chave de API encontrada para tesourotransparente.gov.br. "
+    #        "Recomenda-se definir a variável de ambiente TESOUROTRANSPARENTE_API_KEY "
     #        "com uma chave válida para evitar bloqueios por excesso de requisições."
     #    )
     response = requests.get(API_URL, headers=headers, timeout=30)
