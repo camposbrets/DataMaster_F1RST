@@ -14,6 +14,7 @@ from urllib3.util.retry import Retry
 import pandas as pd
 from pathlib import Path
 import os
+from datetime import datetime
 from include.dataset.gcs_utils import read_csv_years_from_gcs, get_default_bucket
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,12 @@ VARIABLE_MAP = {
 
 SIDRA_API_BASE = "https://apisidra.ibge.gov.br/values"
 
+from datetime import datetime
+
 # Anos de interesse: sobreposicao com CAPAG (2017+)
 # Inclui anos anteriores para calculo de taxa_crescimento_pib
-PIB_YEARS = list(range(2015, 2024))
+# Comeca em 2015 e vai ate o ano atual dinamicamente.
+PIB_YEARS = list(range(2015, datetime.now().year + 1))
 
 
 UF_MAP = {

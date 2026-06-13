@@ -8,6 +8,8 @@
     cluster_by=["uf_id"]
 ) }}
 
+-- Manter como tabela de full refresh por design: a taxa de crescimento YoY depende
+-- da sequencia completa dos anos por municipio e de uma recomputacao da serie historica.
 with pib as (
     select * from {{ ref('slv_pib_municipal') }}
 ),

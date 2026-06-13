@@ -7,7 +7,8 @@ profile: 'capag'
 models:
   capag:
     bronze:
-      +materialized: view
+      +materialized: incremental
+      +incremental_strategy: append
       +schema: bronze
       +tags: ['bronze']
     silver:
@@ -20,4 +21,6 @@ models:
       +tags: ['gold']
 
 vars:
-  projeto_id: 'projeto-data-master'
+  project_id: "{{ env_var('DBT_GCP_PROJECT_ID', 'projeto-data-master') }}"
+  projeto_id: "{{ env_var('DBT_GCP_PROJECT_ID', 'projeto-data-master') }}"
+  incremental_lookback_years: 1

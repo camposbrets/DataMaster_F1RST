@@ -2,7 +2,7 @@
 # PROVIDER - Conecta ao Google Cloud Platform
 # =============================================
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.5.0"
 
   required_providers {
     google = {
@@ -11,15 +11,7 @@ terraform {
     }
   }
 
-  # Backend local: state armazenado em infra/terraform.tfstate
-  # Para times maiores, migrar para backend remoto (GCS/S3)
-  # descomentando o bloco abaixo e criando o bucket:
-  #   gsutil mb -l US gs://datamaster-terraform-state
-  #
-  # backend "gcs" {
-  #   bucket = "datamaster-terraform-state"
-  #   prefix = "terraform/state"
-  # }
+  backend "gcs" {}
 }
 
 provider "google" {
@@ -27,150 +19,190 @@ provider "google" {
   region  = var.region
 }
 
+locals {
+  dataset_definitions = merge([
+    for layer, datasets in var.datasets_by_layer : {
+      for dataset_id in datasets :
+      dataset_id => {
+        layer       = layer
+        description = lookup(var.dataset_descriptions, dataset_id, "Dataset ${dataset_id} (${layer})")
+      }
+    }
+  ]...)
+}
+
 # =============================================
 # GCS BUCKET - Armazenamento de dados raw
 # =============================================
-resource "google_storage_bucket" "raw_data" {
-  name          = var.gcs_bucket_name
-  location      = var.location
-  force_destroy = false
+resource "google_storage_bucket" "data" {
+  name                        = var.gcs_bucket_name
+  location                    = var.location
+  force_destroy               = false
+  uniform_bucket_level_access = true
 
-  # Versionamento: permite recuperar arquivos sobrescritos acidentalmente
+  labels = {
+    environment = var.environment
+    pipeline    = "risco-fiscal"
+    managed_by  = "terraform"
+  }
+
   versioning {
     enabled = true
   }
 
-  # Lifecycle: move dados com mais de 90 dias para Nearline (mais barato)
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "NEARLINE"
+  dynamic "lifecycle_rule" {
+    for_each = var.lifecycle_transition_days > 0 ? [1] : []
+    content {
+      condition {
+        age = var.lifecycle_transition_days
+      }
+      action {
+        type          = "SetStorageClass"
+        storage_class = var.lifecycle_transition_storage_class
+      }
     }
   }
 
-  # Lifecycle: deleta versoes antigas apos 365 dias (mantem as 3 mais recentes)
-  lifecycle_rule {
-    condition {
-      age                = 365
-      with_state         = "ARCHIVED"
-      num_newer_versions = 3
-    }
-    action {
-      type = "Delete"
+  dynamic "lifecycle_rule" {
+    for_each = var.lifecycle_delete_days > 0 ? [1] : []
+    content {
+      condition {
+        age                = var.lifecycle_delete_days
+        with_state         = "ARCHIVED"
+        num_newer_versions = var.lifecycle_keep_latest_versions
+      }
+      action {
+        type = "Delete"
+      }
     }
   }
 }
 
 # =============================================
 # BIGQUERY DATASETS
-# Separados por responsabilidade:
-# - 3 datasets raw (ingestao das fontes)
-# - 3 datasets medallion (bronze/silver/gold)
 # =============================================
+resource "google_bigquery_dataset" "this" {
+  for_each = local.dataset_definitions
 
-# --- Datasets de ingestao (raw) ---
-
-resource "google_bigquery_dataset" "capag" {
-  dataset_id  = "capag"
-  description = "Dados brutos CAPAG - Capacidade de Pagamento dos Municipios (Tesouro Nacional)"
+  dataset_id  = each.key
+  description = each.value.description
   location    = var.location
 
-  labels = {
-    camada   = "raw"
-    fonte    = "tesouro-nacional"
-    pipeline = "risco-fiscal"
-  }
-}
-
-resource "google_bigquery_dataset" "cidades" {
-  dataset_id  = "cidades"
-  description = "Cadastro de municipios brasileiros (IBGE Localidades)"
-  location    = var.location
-
-  labels = {
-    camada   = "raw"
-    fonte    = "ibge"
-    pipeline = "risco-fiscal"
-  }
-}
-
-resource "google_bigquery_dataset" "pib" {
-  dataset_id  = "pib"
-  description = "PIB Municipal - Produto Interno Bruto por municipio (IBGE/SIDRA tabela 5938)"
-  location    = var.location
-
-  labels = {
-    camada   = "raw"
-    fonte    = "ibge"
-    pipeline = "risco-fiscal"
-  }
-}
-
-# --- Datasets Medallion Architecture ---
-
-resource "google_bigquery_dataset" "bronze" {
-  dataset_id  = "bronze"
-  description = "Camada Bronze - Views espelhando dados brutos sem transformacao"
-  location    = var.location
-
-  labels = {
-    camada   = "bronze"
-    pipeline = "risco-fiscal"
-  }
-}
-
-resource "google_bigquery_dataset" "silver" {
-  dataset_id  = "silver"
-  description = "Camada Silver - Dados limpos, tipados e deduplicados"
-  location    = var.location
-
-  labels = {
-    camada   = "silver"
-    pipeline = "risco-fiscal"
-  }
-}
-
-resource "google_bigquery_dataset" "gold" {
-  dataset_id  = "gold"
-  description = "Camada Gold - Modelos dimensionais, fatos e reports analiticos"
-  location    = var.location
-
-  labels = {
-    camada   = "gold"
-    pipeline = "risco-fiscal"
-  }
+  labels = merge(
+    {
+      environment = var.environment
+      camada      = each.value.layer
+      pipeline    = "risco-fiscal"
+      managed_by  = "terraform"
+    },
+    lookup(var.dataset_labels, each.key, {})
+  )
 }
 
 # =============================================
-# SERVICE ACCOUNT e IAM
+# IAM GRANULAR POR DATASET
 # =============================================
-# Para habilitar, ative a API de IAM no GCP:
-#   https://console.developers.google.com/apis/api/iam.googleapis.com
-# Depois descomente os blocos abaixo e rode: terraform apply
-#
-# resource "google_service_account" "pipeline" {
-#   account_id   = "datamaster-pipeline"
-#   display_name = "DataMaster Pipeline Service Account"
-#   description  = "Conta de servico para o pipeline de risco fiscal municipal (Airflow + dbt)"
-# }
-#
-# resource "google_storage_bucket_iam_member" "pipeline_gcs" {
-#   bucket = google_storage_bucket.raw_data.name
-#   role   = "roles/storage.objectAdmin"
-#   member = "serviceAccount:${google_service_account.pipeline.email}"
-# }
-#
-# resource "google_project_iam_member" "pipeline_bq_editor" {
-#   project = var.project_id
-#   role    = "roles/bigquery.dataEditor"
-#   member  = "serviceAccount:${google_service_account.pipeline.email}"
-# }
-#
-# resource "google_project_iam_member" "pipeline_bq_job" {
-#   project = var.project_id
-#   role    = "roles/bigquery.jobUser"
-#   member  = "serviceAccount:${google_service_account.pipeline.email}"
-# }
+resource "google_bigquery_dataset_iam_member" "this" {
+  for_each = {
+    for entry in flatten([
+      for dataset_id, bindings in var.dataset_iam_bindings : [
+        for binding in bindings : {
+          dataset_id = dataset_id
+          role       = binding.role
+          member     = binding.member
+          key        = "${dataset_id}-${binding.role}-${binding.member}"
+        }
+      ]
+    ]) : entry.key => entry
+  }
+
+  dataset_id = google_bigquery_dataset.this[each.value.dataset_id].dataset_id
+  role       = each.value.role
+  member     = each.value.member
+}
+
+# =============================================
+# WORKLOAD IDENTITY FEDERATION (OPT-IN)
+# =============================================
+resource "google_iam_workload_identity_pool" "github_actions" {
+  count = var.github_actions_wif_enabled ? 1 : 0
+
+  workload_identity_pool_id = var.github_actions_wif_pool_id
+  display_name              = "GitHub Actions pool for ${var.github_repository}"
+  description               = "Workload Identity Federation para GitHub Actions"
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_actions" {
+  count = var.github_actions_wif_enabled ? 1 : 0
+
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions[0].workload_identity_pool_id
+  workload_identity_pool_provider_id = var.github_actions_wif_provider_id
+  display_name                       = "GitHub Actions provider"
+  description                        = "Provider OIDC para GitHub Actions"
+
+  attribute_mapping = {
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+    "attribute.actor"            = "assertion.actor"
+  }
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+
+  attribute_condition = "attribute.repository == \"${var.github_repository}\""
+}
+
+resource "google_service_account" "github_actions" {
+  count = var.github_actions_wif_enabled ? 1 : 0
+
+  account_id   = var.github_actions_service_account_id
+  display_name = "GitHub Actions impersonation"
+  description  = "Service account impersonada pelo GitHub Actions via Workload Identity Federation"
+}
+
+resource "google_service_account_iam_member" "github_actions_impersonation" {
+  count = var.github_actions_wif_enabled ? 1 : 0
+
+  service_account_id = google_service_account.github_actions[0].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions[0].name}/attribute.repository/${var.github_repository}"
+}
+
+# =============================================
+# SECRET MANAGER (OPT-IN)
+# =============================================
+resource "google_secret_manager_secret" "this" {
+  count = var.enable_secret_manager ? 1 : 0
+
+  secret_id = var.secret_manager_secret_id
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+  }
+
+  replication {
+    auto {}
+  }
+}
+
+# =============================================
+# DATA CATALOG POLICY TAGS (OPT-IN)
+# =============================================
+resource "google_data_catalog_taxonomy" "sensitive" {
+  count = var.enable_policy_tags ? 1 : 0
+
+  region                 = var.region
+  display_name           = var.policy_tag_taxonomy_name
+  description            = "Policy tags para colunas sensíveis"
+  activated_policy_types = ["FINE_GRAINED_ACCESS_CONTROL"]
+}
+
+resource "google_data_catalog_policy_tag" "sensitive" {
+  count = var.enable_policy_tags ? 1 : 0
+
+  taxonomy     = google_data_catalog_taxonomy.sensitive[0].id
+  display_name = var.policy_tag_name
+  description  = "Colunas com dados sensíveis"
+}

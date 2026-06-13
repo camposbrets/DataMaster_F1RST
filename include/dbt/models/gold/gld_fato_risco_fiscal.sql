@@ -1,5 +1,7 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='risco_fiscal_id',
     partition_by={
         "field": "ano_base",
         "data_type": "int64",
@@ -59,20 +61,28 @@ scored as (
     select
         *,
 
-        -- Quando PIB nao existe, CAPAG assume peso total
+        -- Flag: classificacao CAPAG valida disponivel.
+        -- Sem CAPAG nao ha base para o score principal -> municipio fica INDETERMINADO.
+        classificacao_capag_id is not null as tem_capag,
+
+        -- Flag: PIB disponivel para este ano?
+        -- Quando PIB nao existe, o score CAPAG eh reescalado para 100 pontos.
         pib is not null as tem_pib,
 
-        -- Score CAPAG (0-70 pts) — NULL quando classificacao ausente
+        -- Score CAPAG (componente principal: consolida endividamento, poupanca corrente e liquidez).
+        -- Pesos efetivos do modelo: A=70, B=50, C=25, D=0.
+        -- Com PIB: 0-70 pontos; sem PIB: 0-100 pontos, aplicado um reescalonamento proporcional.
+        -- Sem classificacao CAPAG valida, o score fica NULL e o municipio entra em INDETERMINADO.
         case classificacao_capag
             when 'A' then 70
             when 'B' then 50
             when 'C' then 25
             when 'D' then 0
-            else null
         end as score_capag_base,
 
-        -- Score Crescimento PIB (0-10 pts)
-        -- NULL quando PIB nao e
+        -- Score Crescimento PIB (0-30 pontos).
+        -- Componente economico: dinamismo da economia municipal.
+        -- NULL quando nao ha PIB ou quando o municipio fica INDETERMINADO.
         case
             when pib is null then null
             when taxa_crescimento_pib is null then 0
@@ -86,23 +96,24 @@ scored as (
     from base
 ),
 
--- Score final: sem PIB -> CAPAG assume 100%; sem CAPAG -> PIB assume 100%; sem ambos -> NULL
+-- Calcular score final:
+--  - Sem CAPAG valido: scores NULL (municipio fica INDETERMINADO, nao classificavel)
+--  - Com PIB: CAPAG (0-70) + Crescimento PIB (0-30) = 0-100 pts
+--  - Sem PIB: CAPAG recalculado proporcionalmente para 0-100 pts (peso total)
 score_final as(
     select
         *,
-        case
-            when score_capag_base is not null and tem_pib then score_capag_base
-            when score_capag_base is not null then cast(round(score_capag_base * 100.0 / 70) as int64)
-            else null
+        case when not tem_capag then null else score_crescimento_pib 
+            end as score_crescimento_pib_final,
+        case 
+            when not tem_capag then null
+            when tem_pib then score_capag_base
+            else cast(round(score_capag_base * 100.0 / 70) as int64)
         end as score_capag,
-        case
-            when score_capag_base is not null and tem_pib
-                then score_capag_base + score_crescimento_pib
-            when score_capag_base is not null
-                then cast(round(score_capag_base * 100.0 / 70) as int64)
-            when tem_pib
-                then cast(round(score_crescimento_pib * 100.0 / 30) as int64)
-            else null
+        case 
+            when not tem_capag then null
+            when tem_pib then score_capag_base + score_crescimento_pib
+            else cast(round(score_capag_base * 100.0 / 70) as int64)
         end as score_risco_fiscal
     from scored
 )
@@ -128,11 +139,13 @@ select
     pib,
     taxa_crescimento_pib,
     tem_pib,
+    tem_capag,
     score_capag,
-    score_crescimento_pib,
+    score_crescimento_pib_final as score_crescimento_pib,
     score_risco_fiscal,
+    -- SEM CAPAG valido -> INDETERMINADO (nao recebe classe de risco enganosa)
     case
-        when score_risco_fiscal is null
+        when not tem_capag
             then 'INDETERMINADO'
         when score_risco_fiscal >= 72
             then 'BAIXO'
@@ -149,3 +162,9 @@ select
         else 'Metropole (> 500k)'
     end as faixa_populacao
 from score_final
+{% if is_incremental() %}
+-- Incremental: processa apenas as particoes (anos) recentes para evitar reprocessar o historico inteiro.
+where ano_base >= (
+    select greatest(0, max(ano_base) - {{ var('incremental_lookback_years', 1) }}) from {{ this }}
+)
+{% endif %}

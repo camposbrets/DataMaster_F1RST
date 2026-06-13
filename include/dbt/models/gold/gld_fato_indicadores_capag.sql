@@ -1,5 +1,7 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='indicador_id',
     partition_by={
         "field": "ano_base",
         "data_type": "int64",
@@ -37,3 +39,9 @@ select
 from capag c
 left join dim_uf u on c.uf = u.uf
 left join dim_class cl on c.classificacao_capag = cl.classificacao_capag
+{% if is_incremental() %}
+where ano_base >= (
+    select greatest(0, max(ano_base) - {{ var('incremental_lookback_years', 1) }})
+    from {{ this }}
+)
+{% endif %}

@@ -1,4 +1,4 @@
-{{ config(materialized='view') }}
+{{ config(materialized='incremental', incremental_strategy='append') }}
 
 select
     instituicao,
@@ -13,5 +13,6 @@ select
     nota_3,
     classificacao_capag,
     icf,
-    ano_base
+    ano_base,
+    current_timestamp() as ingested_at
 from {{ source('capag', 'capag_brasil') }}

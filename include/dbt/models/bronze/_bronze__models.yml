@@ -13,11 +13,17 @@ models:
       - name: ano_base
         tests:
           - not_null
+      - name: ingested_at
+        tests:
+          - not_null
 
   - name: brz_cidades_brasil
     description: "Bronze: cadastro de cidades espelhado do BigQuery raw"
     columns:
       - name: codigo
+        tests:
+          - not_null
+      - name: ingested_at
         tests:
           - not_null
 
@@ -28,5 +34,8 @@ models:
         tests:
           - not_null
       - name: ano
+        tests:
+          - not_null
+      - name: ingested_at
         tests:
           - not_null

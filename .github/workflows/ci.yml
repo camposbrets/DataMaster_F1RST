@@ -1,9 +1,8 @@
 # =============================================
 # CI - Validacao do Pipeline (dbt + Docker)
 # =============================================
-# Roda em todo Push e Pull Request.
-# Valida que o dbt compila, o SQL esta correto,
-# e a imagem Docker builda sem erros.
+# Roda em Push e Pull Request para alteracoes de codigo.
+# Qualquer falha reprova o build.
 # =============================================
 
 name: "CI - Pipeline de Dados"
@@ -11,17 +10,23 @@ name: "CI - Pipeline de Dados"
 on:
   push:
     branches: [main]
-    paths-ignore: ["infra/**", "*.md", "imagens/**"]
+    paths-ignore:
+      - "infra/**"
+      - "**/*.md"
+      - "imagens/**"
   pull_request:
     branches: [main]
-    paths-ignore: ["infra/**", "*.md", "imagens/**"]
+    paths-ignore:
+      - "infra/**"
+      - "**/*.md"
+      - "imagens/**"
+
+permissions:
+  contents: read
 
 jobs:
-  # =============================================
-  # JOB 1: Valida os modelos dbt (SQL)
-  # =============================================
   dbt-validate:
-    name: "dbt compile & lint"
+    name: "dbt deps + parse"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout do codigo
@@ -31,39 +36,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Instalar dbt-bigquery
-        run: pip install dbt-bigquery==1.5.3
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-bigquery==1.5.3
 
-      - name: Instalar dbt packages
+      - name: Instalar dependencias do dbt
         run: |
           cd include/dbt
           dbt deps --profiles-dir .
 
-      # dbt parse valida a sintaxe SQL sem precisar de conexao com o BigQuery
-      - name: dbt parse (validacao de sintaxe)
+      - name: Validar projeto dbt
         run: |
           cd include/dbt
           dbt parse --profiles-dir .
-        # parse nao precisa de conexao real, apenas valida YAML + SQL syntax
-        continue-on-error: true
 
-  # =============================================
-  # JOB 2: Valida a imagem Docker
-  # =============================================
-  docker-build:
-    name: "Docker build"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout do codigo
-        uses: actions/checkout@v4
-
-      - name: Build da imagem Docker
-        run: docker build -t datamaster-test .
-
-  # =============================================
-  # JOB 3: Valida os scripts Python
-  # =============================================
   python-lint:
     name: "Python lint"
     runs-on: ubuntu-latest
@@ -75,6 +64,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Instalar dependencias
         run: pip install flake8
@@ -85,3 +75,80 @@ jobs:
             --max-line-length=120 \
             --ignore=E501,W503,E402 \
             --count --statistics
+
+  docker-build:
+    name: "Docker build"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Build da imagem Docker
+        run: docker build -t datamaster-test .
+
+  dbt-integration:
+    name: "dbt build + docs (opcional)"
+    if: vars.DBT_INTEGRATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Autenticar no Google Cloud via WIF
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Instalar dbt-bigquery
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-bigquery==1.5.3
+
+      - name: Criar profile dbt para CI
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'YAML'
+          capag:
+            target: ci
+            outputs:
+              ci:
+                type: bigquery
+                method: oauth
+                project: ${{ vars.GCP_PROJECT_ID }}
+                dataset: capag
+                threads: 1
+                timeout_seconds: 800
+                location: US
+          YAML
+
+      - name: Instalar dependencias do dbt
+        run: |
+          cd include/dbt
+          dbt deps --profiles-dir ~/.dbt
+
+      - name: Rodar build e testes do dbt
+        run: |
+          cd include/dbt
+          dbt build --profiles-dir ~/.dbt --target ci
+
+      - name: Gerar documentacao do dbt
+        run: |
+          cd include/dbt
+          dbt docs generate --profiles-dir ~/.dbt --target ci
+
+      - name: Publicar artefato com documentacao
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: include/dbt/target

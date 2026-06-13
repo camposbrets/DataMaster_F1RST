@@ -20,6 +20,11 @@ models:
         description: "Ano base dos indicadores fiscais"
         tests:
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2000
+              max_value: 2030
+              config:
+                severity: warn
       - name: uf
         description: "Sigla da UF (2 caracteres)"
         tests:
@@ -38,6 +43,14 @@ models:
         description: "Indice de Liquidez - acima de 1 eh adequado"
       - name: classificacao_capag
         description: "Classificacao CAPAG: A, B, C ou D"
+        tests:
+          - accepted_values:
+              values: ['A','B','C','D','E']
+              config:
+                severity: warn
+      - name: ingested_at
+        tests:
+          - not_null
 
   - name: slv_cidades
     description: "Cadastro de municipios brasileiros, deduplicado por cod_ibge"
@@ -69,6 +82,11 @@ models:
       - name: ano
         tests:
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2002
+              max_value: 2030
+              config:
+                severity: warn
       - name: pib
         description: "PIB total do municipio em R$ (milhares)"
         tests:
@@ -76,6 +94,9 @@ models:
               min_value: 0
               config:
                 severity: warn
+      - name: ingested_at
+        tests:
+          - not_null
   - name: slv_dim_uf
     description: "Dimensao de Unidades Federativas"
     columns:
