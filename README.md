@@ -678,6 +678,12 @@ Para que os workflows do **GitHub Actions** consigam acessar o Google Cloud auto
 
 ## 11. Reprodução do Projeto
 
+### Reprodutibilidade após as mudanças
+
+Sim. A reprodutibilidade melhorou porque a infraestrutura e o fluxo passaram a ser parametrizados em vez de dependerem de valores fixos no código. O projeto agora lê projeto GCP, bucket, credenciais e demais opções de ambiente em pontos centralizados como [include/dbt/profiles.yml](include/dbt/profiles.yml), [dags/capag.py](dags/capag.py), [docker-compose.override.yml](docker-compose.override.yml) e [infra/variables.tf](infra/variables.tf).
+
+Isso significa que uma terceira pessoa consegue reproduzir o ambiente em outro projeto GCP sem editar o código-fonte para cada caso: basta fornecer as credenciais e ajustar os valores desejados via variáveis de ambiente ou via Terraform.
+
 ### Pré-requisitos
 
 | Requisito | Versão mínima | Verificar com |
@@ -728,16 +734,30 @@ cd DataMaster_F1RST
 >
 > Dentro do container Airflow (`astro dev start`) isso **não é necessário** — as tasks usam a Connection `gcp` configurada no [Passo 6](#passo-6-configurar-conexão-gcp-no-airflow).
 
-### Passo 3: Ajustar Project ID e Bucket (se necessário)
+### Passo 3: Ajustar Project ID, bucket e variáveis de execução (se necessário)
 
-Se o seu Project ID for diferente de `projeto-data-master` ou o bucket for diferente de `bruno_dm`, altere nos arquivos:
+Se o seu Project ID for diferente de `projeto-data-master` ou o bucket for diferente de `bruno_dm`, você pode fazer isso sem alterar o código-fonte, usando variáveis de ambiente e/ou variáveis do Terraform.
 
-| Arquivo | O que alterar |
-| --- | --- |
-| `include/dbt/profiles.yml` | Campo `project` |
-| `include/dbt/models/sources/sources.yml` | Campo `database` em cada source |
-| `dags/capag.py` | Variável `GCS_BUCKET` no topo do arquivo |
-| `infra/variables.tf` | Defaults de `project_id` e `gcs_bucket_name` |
+Exemplos mínimos:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/caminho/para/service_account.json"
+export DBT_GCP_KEYFILE="/caminho/para/service_account.json"
+export DBT_GCP_PROJECT_ID="seu-project-id"
+export GCP_PROJECT_ID="seu-project-id"
+export GCS_BUCKET="seu-bucket"
+export AIRFLOW_GCP_CONN_ID="gcp"
+export AIRFLOW_BASE_PATH="/usr/local/airflow"
+```
+
+Se preferir, o Terraform também aceita sobrescritas via `-var`:
+
+```bash
+terraform -chdir=infra init
+terraform -chdir=infra plan -var="project_id=seu-project-id" -var="gcs_bucket_name=seu-bucket"
+```
+
+> Em geral, a pessoa que for reproduzir o projeto precisa apenas de: uma conta GCP com permissões para GCS e BigQuery, um arquivo de credenciais JSON, Docker/Astro e Terraform.
 
 ### Passo 4: Provisionar infraestrutura (Terraform)
 
