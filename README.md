@@ -112,6 +112,7 @@ Os dados são obtidos do **IBGE** (tabela SIDRA 5938), que publica o PIB de todo
 
 - **Terraform:** toda a infraestrutura GCP (bucket GCS + 6 datasets BigQuery) é provisionada como código. Detalhes na [Seção 9](#9-infraestrutura-como-código-terraform).
 - **GitHub Actions:** validação automática de SQL, Docker e infraestrutura a cada envio de código. Detalhes na [Seção 10](#10-cicd-github-actions).
+- **Parâmetros do fluxo:** a DAG e o projeto dbt passaram a ler valores de ambiente para projeto GCP, bucket, conexão do Airflow e webhook do Slack, deixando a execução mais portável entre ambientes.
 
 ### Orquestração
 
@@ -196,7 +197,7 @@ Em versões anteriores deste projeto, o consumo era feito pelo **`dados.gov.br`*
 
 ### Bronze (dataset: `bronze`) — 3 views
 
-A camada Bronze contém views que espelham os dados brutos exatamente como foram carregados nas tabelas raw do BigQuery (vindas do GCS), servindo como ponto de partida rastreável para as transformações seguintes.
+A camada Bronze contém views que espelham os dados brutos exatamente como foram carregados nas tabelas raw do BigQuery (vindas do GCS), servindo como ponto de partida rastreável para as transformações seguintes. Nas últimas alterações, ela passou a ser tratada como camada incremental append-only, preservando o histórico e adicionando metadados de ingestão sem sobrescrever registros antigos.
 
 | Modelo | Fonte dos dados |
 | --- | --- |
@@ -205,7 +206,7 @@ A camada Bronze contém views que espelham os dados brutos exatamente como foram
 | `brz_pib_municipal` | Tabela bruta de PIB Municipal |
 
 ### Silver (dataset: `silver`) — 5 tabelas
-Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" do projeto — qualquer análise deve partir daqui ou da camada Gold. Particionados por ano quando aplicável.
+Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" do projeto — qualquer análise deve partir daqui ou da camada Gold. Particionados por ano quando aplicável. A implementação recente passou a materializar essa camada de forma incremental, com deduplicação por chave de negócio e reprocessamento restrito a janelas recentes via lookback configurável.
 
 | Modelo | Descrição | Partição |
 | --- | --- | --- |
@@ -216,7 +217,7 @@ Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" d
 | `slv_dim_classificacao_capag` | Tabela de referência das classificações CAPAG (A, B, C, D) com suas descrições por extenso (ex.: "A — Boa capacidade de pagamento"), atribuindo um identificador numérico único para cada classificação | — |
 
 ### Gold (dataset: `gold`) — 10 tabelas
-Modelos de negócio prontos para consumo analítico e dashboards.
+Modelos de negócio prontos para consumo analítico e dashboards. A camada Gold recebeu ajustes para explicitar a regra de negócio em que municípios sem CAPAG válido são marcados como `INDETERMINADO`, preservando scores nulos nesse cenário e evitando classificações inconsistentes.
 
 #### Dimensões (3 tabelas)
 
@@ -494,7 +495,7 @@ Gera **6 tipos de insights** em linguagem natural, consultando diretamente as ta
 
 ## 8. Dashboards no Metabase
 
-O **Metabase** é a ferramenta de visualização de dados utilizada neste projeto. Ele roda localmente como um container Docker na porta 3000 e se conecta diretamente ao BigQuery para consumir as tabelas da camada Gold. O Metabase já é iniciado automaticamente junto com o Airflow ao executar o comando `astro dev start` — não é necessário instalar ou configurar nada separadamente.
+O **Metabase** é a ferramenta de visualização de dados utilizada neste projeto. Ele roda localmente como um container Docker na porta 3000 e se conecta diretamente ao BigQuery para consumir as tabelas da camada Gold. O Metabase já é iniciado automaticamente junto com o Airflow ao executar o comando `astro dev start` — não é necessário instalar ou configurar nada separadamente. Nas alterações recentes, o override do Docker Compose passou a ler a chave da API do Google Maps via variável de ambiente e a aplicar limites de memória/JVM ao container, deixando a execução mais previsível.
 
 > **Todas as queries SQL dos dashboards estão documentadas em [`include/metabase-data/queries_metabase.sql`](include/metabase-data/queries_metabase.sql)**, com comentários sobre o tipo de visualização e filtros recomendados para cada card.
 
@@ -586,13 +587,15 @@ Toda a infraestrutura GCP é provisionada e versionada via **Terraform** no dire
 
 | Recurso | Descrição |
 | --- | --- |
-| `google_storage_bucket.raw_data` | Bucket GCS (`bruno_dm`) com versionamento habilitado e lifecycle policies |
+| `google_storage_bucket.raw_data` | Bucket GCS (`bruno_dm`) com versionamento habilitado, lifecycle policies e nome configurável por variável |
 | `google_bigquery_dataset.capag` | Dataset raw para dados CAPAG |
 | `google_bigquery_dataset.cidades` | Dataset raw para cadastro de municípios |
 | `google_bigquery_dataset.pib` | Dataset raw para PIB Municipal |
 | `google_bigquery_dataset.bronze` | Dataset Bronze — views espelhando dados brutos |
 | `google_bigquery_dataset.silver` | Dataset Silver — dados limpos e tipados |
 | `google_bigquery_dataset.gold` | Dataset Gold — modelos dimensionais e reports |
+
+Além desses recursos, o módulo Terraform foi expandido para suportar IAM, identidade federada opcional (WIF), Secret Manager opcional e policy tags, com defaults centralizados em `variables.tf`.
 
 ### Políticas de ciclo de vida (GCS)
 
@@ -640,13 +643,15 @@ O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflo
 Este workflow executa **3 verificações independentes em paralelo:**
 
 **Verificação 1 — Validação SQL (dbt):**
-Instala o dbt e verifica se todos os arquivos SQL e YAML dos modelos de dados estão com sintaxe correta, sem precisar se conectar ao BigQuery.
+Instala o dbt e verifica se todos os arquivos SQL e YAML dos modelos de dados estão com sintaxe correta, sem precisar se conectar ao BigQuery. A validação recente inclui `dbt deps` e `dbt parse`, cobrindo dependências, macros e referências do projeto.
 
 **Verificação 2 — Build Docker:**
 Constrói a imagem Docker do projeto para validar que o Dockerfile e todas as dependências instalam corretamente, sem erros.
 
 **Verificação 3 — Qualidade do código Python:**
 Executa o flake8 (uma ferramenta de análise estática) sobre os scripts Python do projeto, verificando se seguem boas práticas de estilo e se não possuem erros comuns de programação.
+
+Na versão mais recente do fluxo, o Terraform também passou a ter validação de formatação e plan em PRs, com apply condicionado a variáveis do repositório quando a mudança é aprovada.
 
 ### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
 
