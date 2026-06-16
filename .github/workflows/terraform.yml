@@ -54,7 +54,7 @@ jobs:
           if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
             terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
           else
-            terraform init -input=false -backend=false
+            terraform init -input=false -reconfigure
           fi
 
       - name: Terraform Validate
@@ -91,7 +91,7 @@ jobs:
           if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
             terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
           else
-            terraform init -input=false -backend=false
+            terraform init -input=false -reconfigure
           fi
 
       - name: Terraform Plan
@@ -127,7 +127,7 @@ jobs:
           if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
             terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
           else
-            terraform init -input=false -backend=false
+            terraform init -input=false -reconfigure
           fi
 
       - name: Terraform Apply

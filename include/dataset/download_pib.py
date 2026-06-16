@@ -33,8 +33,6 @@ VARIABLE_MAP = {
 
 SIDRA_API_BASE = "https://apisidra.ibge.gov.br/values"
 
-from datetime import datetime
-
 # Anos de interesse: sobreposicao com CAPAG (2017+)
 # Inclui anos anteriores para calculo de taxa_crescimento_pib
 # Comeca em 2015 e vai ate o ano atual dinamicamente.
