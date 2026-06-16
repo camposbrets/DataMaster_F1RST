@@ -24,7 +24,7 @@ from airflow.models.baseoperator import chain
 from astro.sql.table import Table, Metadata
 from astro.constants import FileType
 
-from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG
+from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG, DBT_EXECUTION_CONFIG
 from cosmos.airflow.task_group import DbtTaskGroup
 from cosmos.constants import LoadMode, TestBehavior
 from cosmos.config import RenderConfig
@@ -298,6 +298,7 @@ def capag():
         group_id='bronze',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/bronze'],
@@ -312,8 +313,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/bronze',
+            [dbt_executable, 'test', '--select', 'path:models/bronze',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -332,6 +334,7 @@ def capag():
         group_id='silver',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/silver'],
@@ -346,8 +349,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/silver',
+            [dbt_executable, 'test', '--select', 'path:models/silver',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -366,6 +370,7 @@ def capag():
         group_id='gold',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/gold'],
@@ -380,8 +385,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/gold',
+            [dbt_executable, 'test', '--select', 'path:models/gold',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -401,7 +407,7 @@ def capag():
         """Gera relatorio de insights automaticos a partir das tabelas gold."""
         from include.insights.generate_insights import generate_all_insights
         report = generate_all_insights(
-            credentials_path=f'{BASE_PATH}/include/gcp/service_account.json'
+            credentials_path=os.getenv('GCP_KEYFILE_PATH')  # None -> Application Default Credentials (WIF)
         )
         return report['total_insights']
 

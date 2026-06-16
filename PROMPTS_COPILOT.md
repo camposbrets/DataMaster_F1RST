@@ -28,6 +28,7 @@ Vou te enviar tarefas em sequência, uma área por vez. Em CADA tarefa:
 - Se um arquivo divergir do esperado, mostre a diferença e pergunte antes de sobrescrever.
 - NÃO execute comandos destrutivos nem que usem credenciais de nuvem (rebuild full-refresh do dbt, apply de Terraform, remoção de datasets, CLI do GCP). Apenas LISTE para eu rodar.
 - FORA DE ESCOPO (não implementar): upgrade de versões da stack em fim de vida e migração para Kubernetes/GKE — são roadmap, apenas documente se eu pedir.
+- NUNCA altere o Dockerfile nem a imagem base do Airflow (quay.io/astronomer/astro-runtime), e NÃO mude versões de dependências em requirements.txt/packages.yml. Este é um projeto Astronomer (Astro Runtime); trocar a base por uma imagem Python genérica QUEBRA o Airflow. Se achar que a imagem ou as versões precisam mudar, PARE e me pergunte.
 - Se a tarefa for grande, faça um arquivo por vez para não truncar.
 Responda "ok, entendi as regras" e aguarde a primeira tarefa.
 ```
@@ -57,7 +58,7 @@ Não rode init/plan/apply — só me liste esses comandos ao final.
 
 ```text
 Tarefa: criar os workflows de CI/CD em .github/workflows/. Objetivos:
-- CI que valida de verdade (SEM "continue-on-error": qualquer falha reprova o build): instala e valida o projeto dbt (deps + parse), roda lint de Python e faz o build da imagem Docker.
+- CI que valida de verdade (SEM "continue-on-error": qualquer falha reprova o build): instala e valida o projeto dbt (deps + parse), roda lint de Python e faz o build da imagem Docker (apenas executa o build para validar; NÃO edita nem reescreve o Dockerfile existente).
 - Um job OPCIONAL (opt-in via repository variable) que roda build + testes do dbt contra o BigQuery e gera a documentação do dbt (lineage/catálogo) como artefato, autenticando via Workload Identity Federation (sem chave JSON).
 - Workflow de Terraform separado: checagem de formatação e validação como portões obrigatórios; "plan" em pull request e "apply" no merge da branch principal como opt-in (via repository variables e WIF); disparado apenas quando houver mudanças na pasta de infraestrutura.
 O objetivo central é eliminar a falsa sensação de validação do CI antigo.
@@ -132,7 +133,7 @@ Não rode a DAG.
 ## Prompt 8 — Docker / Metabase
 
 ```text
-Tarefa: ajustar o serviço do Metabase no override do docker-compose. Objetivos:
+Tarefa: ajustar o serviço do Metabase no override do docker-compose. Mexa APENAS no docker-compose.override.yml; NÃO altere o Dockerfile do Airflow. Objetivos:
 - Definir limites de memória do contêiner (limite e reserva) e limitar o heap da JVM de forma coerente com esse limite.
 - Ler a chave da API de mapas a partir do ambiente (arquivo .env não versionado), sem segredo hardcoded.
 Não suba os contêineres.

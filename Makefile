@@ -7,6 +7,13 @@
 
 .PHONY: help setup infra-init infra-plan infra-apply infra-destroy airflow-start airflow-stop airflow-restart
 
+TF_INIT_CMD = terraform init -input=false -reconfigure
+CREDENTIAL_FILE := $(CURDIR)/include/gcp/service_account.json
+
+ifneq ($(wildcard $(CREDENTIAL_FILE)),)
+export GOOGLE_APPLICATION_CREDENTIALS := $(CREDENTIAL_FILE)
+endif
+
 help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
@@ -35,16 +42,19 @@ setup: ## Setup completo do projeto (infra + airflow)
 # =============================================
 
 infra-init: ## Inicializa o Terraform (primeira vez)
-	cd infra && terraform init
+	cd infra && $(TF_INIT_CMD)
 
 infra-plan: ## Mostra o que o Terraform vai criar/alterar (sem aplicar)
-	cd infra && terraform plan
+	@$(MAKE) infra-init
+	cd infra && terraform plan -input=false -lock=false
 
 infra-apply: ## Aplica as mudancas de infraestrutura no GCP
-	cd infra && terraform apply
+	@$(MAKE) infra-init
+	cd infra && terraform apply -input=false -lock=false
 
 infra-destroy: ## Destroi toda a infraestrutura no GCP (CUIDADO!)
-	cd infra && terraform destroy
+	@$(MAKE) infra-init
+	cd infra && terraform destroy -input=false -lock=false
 
 infra-fmt: ## Formata os arquivos Terraform
 	cd infra && terraform fmt -recursive
@@ -62,12 +72,32 @@ airflow-stop: ## Para o Airflow e Metabase
 airflow-restart: ## Reinicia o Airflow e Metabase
 	astro dev restart
 
+reset: ## Destroi toda a infra GCP, recria do zero e reinicia o Airflow (reprodutibilidade)
+	@echo "=== [1/4] Sincronizando configuracoes no state (force_destroy + delete_contents) ==="
+	@$(MAKE) infra-apply
+	@echo ""
+	@echo "=== [2/4] Destruindo infraestrutura GCP ==="
+	@$(MAKE) infra-destroy
+	@echo ""
+	@echo "=== [3/4] Recriando infraestrutura GCP ==="
+	@$(MAKE) infra-apply
+	@echo ""
+	@echo "=== [4/4] Reiniciando Airflow ==="
+	astro dev restart
+	@echo ""
+	@echo "=== Reset completo! ==="
+	@echo "Acesse http://localhost:8080 e dispare a DAG manualmente."
+	@echo "Na primeira execucao pos-reset, o dbt cria todas as tabelas do zero (sem --full-refresh necessario)."
+
 # =============================================
 # DBT (Transformacoes)
 # =============================================
 
 dbt-compile: ## Compila os modelos dbt (valida SQL sem executar)
 	cd include/dbt && dbt compile --profiles-dir .
+
+dbt-full-refresh: ## Recria todas as tabelas dbt do zero (necessario apos mudar materialization)
+	astro dev bash -c "/usr/local/airflow/dbt_venv/bin/dbt run --full-refresh --project-dir /usr/local/airflow/include/dbt --profiles-dir /usr/local/airflow/include/dbt"
 
 dbt-docs: ## Gera documentacao do dbt e abre no navegador
 	cd include/dbt && dbt docs generate --profiles-dir . && dbt docs serve --profiles-dir .

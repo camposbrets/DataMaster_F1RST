@@ -10,21 +10,23 @@ Pode ser executado:
 """
 
 import logging
+import os
 from datetime import datetime
 
 from google.cloud import bigquery
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ID = 'projeto-data-master'
+PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'projeto-data-master')
 GOLD_DATASET = 'gold'
 INSIGHTS_TABLE = f'{PROJECT_ID}.{GOLD_DATASET}.insights_risco_fiscal'
 
 
 def get_client(credentials_path=None):
-    """Cria cliente BigQuery."""
-    if credentials_path:
-        return bigquery.Client.from_service_account_json(credentials_path)
+    """Cria cliente BigQuery. Tenta keyfile (path explicito ou GCP_KEYFILE_PATH), caindo em ADC/WIF."""
+    keyfile = credentials_path or os.getenv('GCP_KEYFILE_PATH')
+    if keyfile and os.path.exists(keyfile):
+        return bigquery.Client.from_service_account_json(keyfile, project=PROJECT_ID)
     return bigquery.Client(project=PROJECT_ID)
 
 

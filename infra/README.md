@@ -11,8 +11,9 @@ Este módulo provisiona os recursos básicos de dados do projeto DataMaster no G
 ## Uso
 
 1. Ajuste os valores em terraform.tfvars (ou use terraform.tfvars.example como base).
-2. Inicialize o backend remoto do estado antes de aplicar, por exemplo com um bucket GCS separado.
-3. Valide e aplique os recursos com Terraform.
+2. O fluxo local usa o backend padrão do Terraform em um arquivo de estado local.
+3. Se quiser migrar para um backend remoto no futuro, é possível ajustar o bloco de backend em main.tf.
+4. Valide e aplique os recursos com Terraform.
 
 ## Comandos a rodar localmente
 

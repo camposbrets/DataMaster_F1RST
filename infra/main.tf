@@ -11,7 +11,13 @@ terraform {
     }
   }
 
-  backend "gcs" {}
+  # Backend local para dev/demo (state em infra/terraform.tfstate).
+  # Para producao, substituir por:
+  #   backend "gcs" {
+  #     bucket = "<BUCKET_DE_STATE_SEPARADO>"
+  #     prefix = "terraform/state"
+  #   }
+  backend "local" {}
 }
 
 provider "google" {
@@ -37,7 +43,7 @@ locals {
 resource "google_storage_bucket" "data" {
   name                        = var.gcs_bucket_name
   location                    = var.location
-  force_destroy               = false
+  force_destroy               = var.force_destroy
   uniform_bucket_level_access = true
 
   labels = {
@@ -84,9 +90,10 @@ resource "google_storage_bucket" "data" {
 resource "google_bigquery_dataset" "this" {
   for_each = local.dataset_definitions
 
-  dataset_id  = each.key
-  description = each.value.description
-  location    = var.location
+  dataset_id                 = each.key
+  description                = each.value.description
+  location                   = var.location
+  delete_contents_on_destroy = var.force_destroy
 
   labels = merge(
     {

@@ -1,4 +1,8 @@
-{{ config(materialized='incremental', incremental_strategy='append') }}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    partition_by={'field': 'ingested_at', 'data_type': 'timestamp', 'granularity': 'day'}
+) }}
 
 select
     id,

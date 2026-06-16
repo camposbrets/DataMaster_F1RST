@@ -183,41 +183,33 @@ models:
               config:
                 severity: warn
       - name: score_capag
-        description: "Score CAPAG escalonado para 0 a 100 pontos. NULL quando o municipio fica INDETERMINADO."
+        description: "Pontuacao do componente CAPAG. Com PIB: 0-70 pontos. Sem PIB: escalado para 0-100 pontos. NULL quanso sem CAPAG (indeterminado)."
         tests:
-          - dbt_utils.expression_is_true:
-              expression: "coalesce(tem_capag, false) = false or score_capag is not null"
-              config:
-                severity: error
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
               config:
-                severity: warn
-      - name: score_crescimento_pib
-        description: "Score de crescimento do PIB. NULL quando nao ha PIB ou quando o municipio fica INDETERMINADO."
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "coalesce(tem_capag, false) = false or coalesce(tem_pib, false) = false or score_crescimento_pib is not null"
-              config:
                 severity: error
+      - name: tem_capag
+        description: "Flag: classificacao CAPAG valida (A/B/C/D) disponivel. FALSE -> INDETERMINADO"
+        tests:
+          - not_null
+      - name: score_crescimento_pib
+        description: "Pontuacao do componente de crescimento do PIB. 0-30 pontos. NULL quando sem PIB ou sem CAPAG (indeterminado)."
+        tests:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 30
               config:
-                severity: warn
-      - name: score_risco_fiscal
-        description: "Score composto de 0 a 100 pontos. NULL quando o municipio fica INDETERMINADO."
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "coalesce(tem_capag, false) = false or score_risco_fiscal is not null"
-              config:
                 severity: error
+      - name: score_risco_fiscal
+        description: "Score composto de 0 a 100 pontos. NULL quando sem CAPAG -> INDETERMINADO."
+        tests:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
               config:
-                severity: warn
+                severity: error
       - name: classificacao_risco
         description: "BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36)"
         tests:

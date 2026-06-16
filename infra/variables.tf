@@ -32,6 +32,12 @@ variable "gcs_bucket_name" {
   default     = "bruno_dm"
 }
 
+variable "force_destroy" {
+  description = "Permite destruir o bucket mesmo com objetos (true em dev para reset limpo)"
+  type        = bool
+  default     = true
+}
+
 variable "datasets_by_layer" {
   description = "Mapeamento de camadas para datasets do BigQuery"
   type        = map(list(string))
