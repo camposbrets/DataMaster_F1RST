@@ -10,6 +10,9 @@ webserver_config.py
 airflow.cfg
 airflow.db
 
+# Dados brutos (baixados pelo pipeline)
+include/dataset/*.csv
+
 # GCP credentials
 include/gcp/service_account.json
 

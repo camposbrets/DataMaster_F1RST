@@ -1,5 +1,7 @@
 {{ config(
-    materialized='table',
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key='capag_sk',
     partition_by={
         "field": "ano_base",
         "data_type": "int64",
@@ -9,6 +11,15 @@
 
 with source as (
     select * from {{ ref('brz_capag_brasil') }}
+    {% if is_incremental() %}
+    where ano_base >= (
+        select greatest(
+            0,
+            max(ano_base) - {{ var('incremental_lookback_years', 1) }}
+        )
+        from {{ this }}
+    )
+    {% endif %}
 ),
 
 cleaned as (
@@ -45,6 +56,7 @@ cleaned as (
         upper(trim(nullif(cast(classificacao_capag as string), ''))) as classificacao_capag,
         upper(trim(nullif(nullif(cast(icf as string), 'n.d.'), ''))) as icf,
         cast(ano_base as int64) as ano_base,
+        cast(ingested_at as timestamp) as ingested_at,
 
         {{ dbt_utils.generate_surrogate_key(['cod_ibge', 'ano_base']) }} as capag_sk
 
@@ -57,7 +69,7 @@ deduplicated as (
     select *,
         row_number() over (
             partition by cod_ibge, ano_base
-            order by classificacao_capag desc
+            order by ingested_at desc, classificacao_capag desc
         ) as rn
     from cleaned
 )

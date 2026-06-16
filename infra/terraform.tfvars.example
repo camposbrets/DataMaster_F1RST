@@ -1,0 +1,46 @@
+# Exemplo de valores por ambiente
+
+project_id = "projeto-data-master"
+region     = "us-central1"
+location   = "US"
+environment = "dev"
+
+gcs_bucket_name = "bruno_dm"
+
+# Datasets por camada
+#datasets_by_layer = {
+#  raw    = ["capag", "cidades", "pib"]
+#  bronze = ["bronze"]
+#  silver = ["silver"]
+#  gold   = ["gold"]
+#}
+
+# Lifecycle
+lifecycle_transition_days      = 90
+lifecycle_transition_storage_class = "NEARLINE"
+lifecycle_delete_days          = 365
+lifecycle_keep_latest_versions  = 3
+
+# IAM granular
+#dataset_iam_bindings = {
+#  capag = [{
+#    role   = "roles/bigquery.dataViewer"
+#    member = "serviceAccount:bruno-dm-projeto@projeto-data-master.iam.gserviceaccount.com"
+#  }]
+#}
+
+# WIF (opt-in)
+github_actions_wif_enabled = false
+#github_repository = "camposbrets/DataMaster_F1RST"
+#github_actions_wif_pool_id = "datamaster-github-pool"
+#github_actions_wif_provider_id = "github-actions-provider"
+#github_actions_service_account_id = "datamaster-github-actions"
+
+# Secret Manager (opt-in)
+enable_secret_manager = false
+#secret_manager_secret_id = "datamaster-gcp-credentials"
+
+# Policy tags (opt-in)
+enable_policy_tags = false
+#policy_tag_taxonomy_name = "datamaster-sensitive-data"
+#policy_tag_name = "sensitive"

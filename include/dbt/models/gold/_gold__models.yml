@@ -65,12 +65,30 @@ models:
       - name: cod_ibge
         tests:
           - not_null
+          - relationships:
+              to: ref('gld_dim_instituicoes')
+              field: cod_ibge
+              config:
+                severity: warn
       - name: uf_id
         description: "FK para gld_dim_uf"
         tests:
           - relationships:
               to: ref('gld_dim_uf')
               field: uf_id
+              config:
+                severity: warn
+      - name: ano_base
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 2015
+              max_value: 2030
+              config:
+                severity: warn
+      - name: populacao
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
               config:
                 severity: warn
       - name: classificacao_capag_id
@@ -95,12 +113,24 @@ models:
       - name: cod_ibge
         tests:
           - not_null
+          - relationships:
+              to: ref('gld_dim_instituicoes')
+              field: cod_ibge
+              config:
+                severity: warn
       - name: uf_id
         description: "FK para gld_dim_uf"
         tests:
           - relationships:
               to: ref('gld_dim_uf')
               field: uf_id
+              config:
+                severity: warn
+      - name: ano
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 2002
+              max_value: 2030
               config:
                 severity: warn
       - name: pib
@@ -116,7 +146,12 @@ models:
   - name: gld_fato_risco_fiscal
     description: >
       Modelo principal: cruzamento CAPAG x PIB com score de risco fiscal composto (0-100).
-      Classificacao de risco: BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36).
+      Com PIB disponivel: CAPAG (70pts) + taxa de crescimento do PIB (30pts).
+      Sem PIB disponivel: CAPAG escalado para 100% do score.
+      Sem classificacao CAPAG valida: municipio fica INDETERMINADO e os scores ficam NULL
+      (nao recebe classe de risco enganosa).
+      Classificacao de risco: BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36),
+      INDETERMINADO (sem CAPAG).
       Particionado por ano_base, clusterizado por classificacao_risco e uf.
     columns:
       - name: risco_fiscal_id
@@ -127,6 +162,18 @@ models:
       - name: cod_ibge
         tests:
           - not_null
+          - relationships:
+              to: ref('gld_dim_instituicoes')
+              field: cod_ibge
+              config:
+                severity: warn
+      - name: ano_base
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 2015
+              max_value: 2030
+              config:
+                severity: warn
       - name: classificacao_capag_id
         description: "FK para gld_dim_classificacao_capag"
         tests:
@@ -135,19 +182,45 @@ models:
               field: classificacao_capag_id
               config:
                 severity: warn
-      - name: score_risco_fiscal
-        description: "Score composto de 0 a 100 pontos. NULL quando nao ha dados CAPAG nem PIB."
+      - name: score_capag
+        description: "Pontuacao do componente CAPAG. Com PIB: 0-70 pontos. Sem PIB: escalado para 0-100 pontos. NULL quanso sem CAPAG (indeterminado)."
         tests:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
               config:
-                severity: warn
+                severity: error
+      - name: tem_capag
+        description: "Flag: classificacao CAPAG valida (A/B/C/D) disponivel. FALSE -> INDETERMINADO"
+        tests:
+          - not_null
+      - name: score_crescimento_pib
+        description: "Pontuacao do componente de crescimento do PIB. 0-30 pontos. NULL quando sem PIB ou sem CAPAG (indeterminado)."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 30
+              config:
+                severity: error
+      - name: score_risco_fiscal
+        description: "Score composto de 0 a 100 pontos. NULL quando sem CAPAG -> INDETERMINADO."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: error
       - name: classificacao_risco
         description: "BAIXO (>=72), MODERADO (>=54), ELEVADO (>=36), CRITICO (<36)"
         tests:
           - accepted_values:
               values: ['BAIXO', 'MODERADO', 'ELEVADO', 'CRITICO', 'INDETERMINADO']
+              config:
+                severity: warn
+      - name: faixa_populacao
+        tests:
+          - accepted_values:
+              values: ['Pequeno (< 20k)', 'Medio (20k-100k)', 'Grande (100k-500k)', 'Metropole (> 500k)']
               config:
                 severity: warn
 

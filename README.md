@@ -24,6 +24,16 @@ Este projeto implementa um **Sistema de Monitoramento de Risco Fiscal Municipal*
 
 O sistema gera um **score de risco fiscal composto (0–100)** que combina a classificação CAPAG (até 70 pts — já consolida endividamento, poupança corrente e liquidez) com o crescimento do PIB municipal (até 30 pts), classificando cada município em: **BAIXO**, **MODERADO**, **ELEVADO**, **CRÍTICO** ou **INDETERMINADO** (quando não há dados suficientes).
 
+### Atualizações recentes
+
+As mudanças mais recentes do projeto foram concentradas em:
+
+- provisionamento de infraestrutura com Terraform para GCS, BigQuery, IAM e recursos opcionais;
+- automação de validação com GitHub Actions para dbt, Python e Terraform;
+- parametrização do fluxo dbt para ambiente e configuração incremental;
+- ajuste da camada Bronze para append-only, da Silver para incremental e deduplicada, e da Gold para a regra explícita de INDETERMINADO;
+- hardening do Airflow para configuração por ambiente e notificação via Slack, além de ajustes no Metabase para chave de API e limites de memória.
+
 ### O que é CAPAG?
 
 O processo CAPAG (Capacidade de Pagamento) é um sistema de avaliação da Secretaria do Tesouro Nacional (STN) que analisa a situação fiscal dos estados e municípios. Avalia três indicadores e, a partir de 2024, incorpora também o ICF:
@@ -102,6 +112,7 @@ Os dados são obtidos do **IBGE** (tabela SIDRA 5938), que publica o PIB de todo
 
 - **Terraform:** toda a infraestrutura GCP (bucket GCS + 6 datasets BigQuery) é provisionada como código. Detalhes na [Seção 9](#9-infraestrutura-como-código-terraform).
 - **GitHub Actions:** validação automática de SQL, Docker e infraestrutura a cada envio de código. Detalhes na [Seção 10](#10-cicd-github-actions).
+- **Parâmetros do fluxo:** a DAG e o projeto dbt passaram a ler valores de ambiente para projeto GCP, bucket, conexão do Airflow e webhook do Slack, deixando a execução mais portável entre ambientes.
 
 ### Orquestração
 
@@ -184,29 +195,33 @@ Em versões anteriores deste projeto, o consumo era feito pelo **`dados.gov.br`*
 
 ## 4. Arquitetura Medalhão
 
-### Bronze (dataset: `bronze`) — 3 views
+### Bronze (dataset: `bronze`) — 3 tabelas incrementais
 
-A camada Bronze contém views que espelham os dados brutos exatamente como foram carregados nas tabelas raw do BigQuery (vindas do GCS), servindo como ponto de partida rastreável para as transformações seguintes.
+A camada Bronze replica os dados brutos das tabelas raw do BigQuery adicionando uma coluna de metadado de ingestão. Cada execução do pipeline **acrescenta** novos registros sem sobrescrever os anteriores (`insert_overwrite` por partição de data), permitindo rastrear quando cada conjunto de dados chegou ao sistema.
 
-| Modelo | Fonte dos dados |
-| --- | --- |
-| `brz_capag_brasil` | Tabela bruta de CAPAG |
-| `brz_cidades_brasil` | Tabela bruta de municípios |
-| `brz_pib_municipal` | Tabela bruta de PIB Municipal |
+Cada modelo Bronze adiciona a coluna `ingested_at` (`TIMESTAMP`) com o instante exato da execução, e a tabela é particionada por essa coluna com granularidade diária. Isso significa que cada execução do pipeline gera uma nova partição do dia, preservando o histórico completo de ingestões.
+
+| Modelo | Fonte dos dados | Partição |
+| --- | --- | --- |
+| `brz_capag_brasil` | Tabela raw CAPAG | `ingested_at` (day) |
+| `brz_cidades_brasil` | Tabela raw de municípios | `ingested_at` (day) |
+| `brz_pib_municipal` | Tabela raw de PIB Municipal | `ingested_at` (day) |
 
 ### Silver (dataset: `silver`) — 5 tabelas
-Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" do projeto — qualquer análise deve partir daqui ou da camada Gold. Particionados por ano quando aplicável.
+Dados limpos, tipados, deduplicados e validados. São as tabelas "confiáveis" do projeto — qualquer análise deve partir daqui ou da camada Gold.
 
-| Modelo | Descrição | Partição |
-| --- | --- | --- |
-| `slv_capag_municipios` | CAPAG limpo: conversão segura de tipos de dados, remoção de registros duplicados (por cod_ibge + ano_base), tratamento de valores inválidos (como `n.d.`) convertidos para nulo, e geração de chave única para cada registro | ano_base |
-| `slv_cidades` | Municípios com remoção de duplicatas por código IBGE (mantém apenas um registro por município) | — |
-| `slv_pib_municipal` | PIB limpo, com remoção de duplicatas (em caso de duplicata, mantém o registro com maior PIB), e geração de chave única para cada registro | ano |
-| `slv_dim_uf` | Tabela de referência das Unidades Federativas: consolida todas as UFs presentes nos dados de CAPAG e de cidades, eliminando repetições e atribuindo um identificador numérico único para cada UF | — |
-| `slv_dim_classificacao_capag` | Tabela de referência das classificações CAPAG (A, B, C, D) com suas descrições por extenso (ex.: "A — Boa capacidade de pagamento"), atribuindo um identificador numérico único para cada classificação | — |
+Os dois modelos de dados principais (`slv_capag_municipios` e `slv_pib_municipal`) são materializados como **incrementais** com estratégia `merge` por chave única, particionados por ano. Eles reprocessam apenas os anos recentes a cada execução (janela de lookback configurável via variável `incremental_lookback_years`, padrão: 1 ano). As três tabelas de dimensão (`slv_cidades`, `slv_dim_uf`, `slv_dim_classificacao_capag`) são materializadas como **tabelas completas** (`table`), pois são pequenas e raramente mudam.
+
+| Modelo | Materialização | Descrição | Partição |
+| --- | --- | --- | --- |
+| `slv_capag_municipios` | `incremental` (merge) | CAPAG limpo: conversão de tipos, remoção de duplicatas por `cod_ibge + ano_base`, tratamento de `n.d.` como nulo, chave única `capag_sk` | `ano_base` (int64, 2015–2030) |
+| `slv_cidades` | `table` | Municípios deduplicados por código IBGE | — |
+| `slv_pib_municipal` | `incremental` (merge) | PIB limpo, deduplicado (mantém maior PIB em caso de duplicata), chave única `pib_sk` | `ano` (int64, 2002–2030) |
+| `slv_dim_uf` | `table` | Referência de Unidades Federativas com ID numérico único | — |
+| `slv_dim_classificacao_capag` | `table` | Referência das classificações CAPAG (A–D) com descrição por extenso e ID numérico | — |
 
 ### Gold (dataset: `gold`) — 10 tabelas
-Modelos de negócio prontos para consumo analítico e dashboards.
+Modelos de negócio prontos para consumo analítico e dashboards. A camada Gold recebeu ajustes para explicitar a regra de negócio em que municípios sem CAPAG válido são marcados como `INDETERMINADO`, preservando scores nulos nesse cenário e evitando classificações inconsistentes.
 
 #### Dimensões (3 tabelas)
 
@@ -469,7 +484,9 @@ Os testes são de dois tipos:
 
 ## 7. Insights Automáticos
 
-Gera **6 tipos de insights** em linguagem natural, consultando diretamente as tabelas da camada Gold no BigQuery. O resultado é salvo na tabela `gold.insights_risco_fiscal`, que é completamente recriada a cada execução (os insights anteriores são substituídos pelos mais recentes):
+Gera **6 tipos de insights** em linguagem natural, consultando diretamente as tabelas da camada Gold no BigQuery. O resultado é salvo na tabela `gold.insights_risco_fiscal`, que é completamente recriada a cada execução.
+
+O script suporta dois modos de autenticação com o BigQuery: se `GCP_KEYFILE_PATH` estiver definido e o arquivo existir, usa o JSON da Service Account; caso contrário, cai automaticamente em Application Default Credentials (ADC) — o que permite execução via Workload Identity Federation em ambientes cloud sem nenhum arquivo de chave.
 
 | Tipo | Prioridade | Insight |
 | --- | --- | --- |
@@ -484,7 +501,12 @@ Gera **6 tipos de insights** em linguagem natural, consultando diretamente as ta
 
 ## 8. Dashboards no Metabase
 
-O **Metabase** é a ferramenta de visualização de dados utilizada neste projeto. Ele roda localmente como um container Docker na porta 3000 e se conecta diretamente ao BigQuery para consumir as tabelas da camada Gold. O Metabase já é iniciado automaticamente junto com o Airflow ao executar o comando `astro dev start` — não é necessário instalar ou configurar nada separadamente.
+O **Metabase** é a ferramenta de visualização de dados utilizada neste projeto. Ele roda localmente como um container Docker na porta 3000 e se conecta diretamente ao BigQuery para consumir as tabelas da camada Gold. O Metabase já é iniciado automaticamente junto com o Airflow ao executar `astro dev start` — não é necessário instalar nada separadamente.
+
+O `docker-compose.override.yml` configura:
+- **Limites de memória:** `mem_limit: 1g` / `mem_reservation: 512m` — evita que o container consuma toda a RAM disponível
+- **Heap da JVM:** `JAVA_TOOL_OPTIONS=-Xms512m -Xmx768m` — define o tamanho inicial e máximo do heap Java
+- **Google Maps (opcional):** lê a chave via `${MB_GOOGLE_MAPS_API_KEY:-}` do `.env` — se não definida, os mapas ficam desabilitados sem erro
 
 > **Todas as queries SQL dos dashboards estão documentadas em [`include/metabase-data/queries_metabase.sql`](include/metabase-data/queries_metabase.sql)**, com comentários sobre o tipo de visualização e filtros recomendados para cada card.
 
@@ -574,15 +596,20 @@ Toda a infraestrutura GCP é provisionada e versionada via **Terraform** no dire
 
 ### Recursos provisionados
 
+Todos os recursos estão declarados em `main.tf`, organizado em blocos temáticos:
+
 | Recurso | Descrição |
 | --- | --- |
-| `google_storage_bucket.raw_data` | Bucket GCS (`bruno_dm`) com versionamento habilitado e lifecycle policies |
-| `google_bigquery_dataset.capag` | Dataset raw para dados CAPAG |
-| `google_bigquery_dataset.cidades` | Dataset raw para cadastro de municípios |
-| `google_bigquery_dataset.pib` | Dataset raw para PIB Municipal |
-| `google_bigquery_dataset.bronze` | Dataset Bronze — views espelhando dados brutos |
-| `google_bigquery_dataset.silver` | Dataset Silver — dados limpos e tipados |
-| `google_bigquery_dataset.gold` | Dataset Gold — modelos dimensionais e reports |
+| `google_storage_bucket.data` | Bucket GCS com versionamento habilitado e lifecycle policies configuráveis |
+| `google_bigquery_dataset.this` | 6 datasets BigQuery via `for_each`: `capag`, `cidades`, `pib`, `bronze`, `silver`, `gold` — com labels por camada |
+| `google_bigquery_dataset_iam_member.this` | IAM granular por dataset: permissões mínimas por camada (`dataViewer` em raw, `dataEditor` em bronze/silver/gold) |
+| `google_iam_workload_identity_pool` | Pool WIF para GitHub Actions — **opt-in** via `github_actions_wif_enabled = true` |
+| `google_iam_workload_identity_pool_provider` | Provider OIDC para GitHub Actions — criado junto com o pool WIF |
+| `google_service_account` | Service Account impersonada pelo GitHub Actions via WIF — criada com o pool |
+| `google_secret_manager_secret` | Segredo no Secret Manager — **opt-in** via `enable_secret_manager = true` |
+| `google_data_catalog_taxonomy` + `google_data_catalog_policy_tag` | Policy tags para colunas sensíveis no BigQuery — **opt-in** via `enable_policy_tags = true` |
+
+**Terraform state:** por padrão, o state é local (`infra/terraform.tfstate`, coberto pelo `.gitignore`). Para produção, descomentar o bloco `backend "gcs"` em `main.tf` e configurar um bucket separado para o state.
 
 ### Políticas de ciclo de vida (GCS)
 
@@ -595,9 +622,11 @@ O Google Cloud Storage cobra pelo armazenamento de dados (embora o volume deste 
 
 ```
 infra/
-├── main.tf          # Provider GCP, bucket GCS, datasets BigQuery
-├── variables.tf     # Variáveis centralizadas (project_id, region, bucket_name)
-└── outputs.tf       # Outputs após apply (URLs, dataset IDs)
+├── main.tf                    # Provider + GCS bucket + BQ datasets + IAM + WIF + Secret Manager + Policy Tags
+├── variables.tf               # Todas as variáveis com defaults e documentação
+├── outputs.tf                 # Outputs após apply (bucket URL, dataset IDs, WIF config)
+├── terraform.tfvars.example   # Template de valores por ambiente (copiar para terraform.tfvars)
+└── terraform.tfvars           # Valores reais (gitignored — nunca commitado)
 ```
 
 ### Comandos úteis
@@ -627,16 +656,19 @@ O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflo
 
 **Dispara em:** a cada envio de código ou abertura de Pull Request na branch `main` (ignora alterações em arquivos de infraestrutura, documentação e imagens).
 
-Este workflow executa **3 verificações independentes em paralelo:**
+Este workflow executa **3 jobs sempre ativos + 1 job opcional com integração GCP:**
 
-**Verificação 1 — Validação SQL (dbt):**
-Instala o dbt e verifica se todos os arquivos SQL e YAML dos modelos de dados estão com sintaxe correta, sem precisar se conectar ao BigQuery.
+**Job 1 — Validação SQL (`dbt-validate`):**
+Instala o dbt e verifica se todos os arquivos SQL e YAML dos modelos de dados estão com sintaxe correta, sem precisar se conectar ao BigQuery. Executa `dbt deps` e `dbt parse`, cobrindo dependências, macros e referências do projeto.
 
-**Verificação 2 — Build Docker:**
+**Job 2 — Build Docker (`docker-build`):**
 Constrói a imagem Docker do projeto para validar que o Dockerfile e todas as dependências instalam corretamente, sem erros.
 
-**Verificação 3 — Qualidade do código Python:**
+**Job 3 — Qualidade do código Python (`python-lint`):**
 Executa o flake8 (uma ferramenta de análise estática) sobre os scripts Python do projeto, verificando se seguem boas práticas de estilo e se não possuem erros comuns de programação.
+
+**Job 4 — Integração dbt + BigQuery (`dbt-integration`, opcional):**
+Executa `dbt build` completo e gera documentação com autenticação real no GCP via Workload Identity Federation. Só é ativado quando a variável de repositório `DBT_INTEGRATION_ENABLED` estiver definida como `true`. Útil para validar a integração completa antes de um merge importante.
 
 ### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
 
@@ -649,19 +681,34 @@ Este workflow executa as seguintes etapas:
 3. **Prévia das mudanças (em Pull Request):** exibe um relatório detalhado do que será criado, alterado ou removido no Google Cloud, sem aplicar nada — permitindo revisão pela equipe.
 4. **Aplicação (após aprovação):** somente quando o código é incorporado à branch principal (merge), as mudanças são efetivamente aplicadas no Google Cloud.
 
-### Segredos do repositório (Secrets)
+### Configuração do GitHub (Secrets e Variables)
 
-Para que os workflows do **GitHub Actions** consigam acessar o Google Cloud automaticamente, é necessário configurar o seguinte segredo nas configurações do repositório GitHub (Settings → Secrets and variables → Actions):
+Os três jobs sempre ativos (`dbt-validate`, `docker-build`, `python-lint`) **não precisam de nenhuma credencial** — funcionam apenas com o código do repositório. O acesso ao GCP só é necessário para os jobs opcionais de Terraform apply e integração dbt.
 
-| Secret | Descrição |
-| --- | --- |
-| `GCP_SA_KEY` | Conteúdo JSON da Service Account do Google Cloud, com permissões de administrador no BigQuery e no Cloud Storage |
+**Para habilitar Terraform plan/apply e integração dbt no CI**, configure em **Settings → Secrets and variables → Actions → Variables**:
 
-> **Nota:** este segredo é necessário **apenas para o CI/CD** (GitHub Actions). Para rodar o projeto localmente, basta ter o arquivo `include/gcp/service_account.json` configurado conforme descrito na [Seção 11 — Reprodução do Projeto](#11-reprodução-do-projeto). Se você não pretende usar o CI/CD, pode ignorar esta configuração.
+| Variable | Exemplo | Finalidade |
+| --- | --- | --- |
+| `GCP_PROJECT_ID` | `meu-projeto-gcp` | ID do projeto GCP (Terraform + dbt-integration) |
+| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/pool/providers/prov` | Provider do Workload Identity Federation |
+| `GCP_WIF_SERVICE_ACCOUNT` | `sa@meu-projeto.iam.gserviceaccount.com` | Service Account impersonada pelo WIF |
+| `TERRAFORM_APPLY_ENABLED` | `true` | Ativa o Terraform apply automático em push na main |
+| `DBT_INTEGRATION_ENABLED` | `true` | Ativa o job de integração dbt + BigQuery |
+| `TF_STATE_BUCKET` | `meu-bucket-state` | (Opcional) Bucket GCS para Terraform state remoto |
+
+> **O que é Workload Identity Federation (WIF)?** É o método recomendado pelo Google para autenticar GitHub Actions no GCP sem usar chaves JSON — mais seguro e sem risco de expor credenciais. Para configurar: Console GCP → IAM → Workload Identity Pools → criar pool + provider para GitHub. O Terraform apply automático é **totalmente opcional** — o pipeline funciona localmente com `make infra-apply` sem nenhuma configuração no GitHub.
+
+> **Para rodar o projeto localmente:** basta ter o arquivo `include/gcp/service_account.json` configurado conforme descrito na [Seção 11 — Reprodução do Projeto](#11-reprodução-do-projeto). O GitHub Actions não é necessário para usar o pipeline localmente.
 
 ---
 
 ## 11. Reprodução do Projeto
+
+### Reprodutibilidade após as mudanças
+
+Sim. A reprodutibilidade melhorou porque a infraestrutura e o fluxo passaram a ser parametrizados em vez de dependerem de valores fixos no código. O projeto agora lê projeto GCP, bucket, credenciais e demais opções de ambiente em pontos centralizados como [include/dbt/profiles.yml](include/dbt/profiles.yml), [dags/capag.py](dags/capag.py), [docker-compose.override.yml](docker-compose.override.yml) e [infra/variables.tf](infra/variables.tf).
+
+Isso significa que uma terceira pessoa consegue reproduzir o ambiente em outro projeto GCP sem editar o código-fonte para cada caso: basta fornecer as credenciais e ajustar os valores desejados via variáveis de ambiente ou via Terraform.
 
 ### Pré-requisitos
 
@@ -699,10 +746,10 @@ cd DataMaster_F1RST
 
 > **Segurança:** O arquivo `service_account.json` está no `.gitignore`. Cada pessoa que reproduzir o projeto deve gerar sua própria chave.
 
-> **Antes de rodar o Terraform**, exporte a variável de ambiente `GOOGLE_APPLICATION_CREDENTIALS` apontando para o JSON da Service Account, na **mesma sessão de terminal** em que for executar o comando. Sem isso, o `terraform apply` (Passo 4) falha com erro de autenticação, porque o provider `google` do Terraform — assim como as bibliotecas `google-cloud-storage` e `google-cloud-bigquery` — procura a credencial nessa variável (Application Default Credentials).
+> **Credencial para o Terraform:** os comandos `make infra-*` detectam automaticamente o arquivo `include/gcp/service_account.json` e exportam `GOOGLE_APPLICATION_CREDENTIALS` sem nenhuma ação manual — basta o arquivo existir no lugar certo. Se você rodar `terraform` diretamente (sem make), exporte manualmente na sessão de terminal:
 >
 > ```powershell
-> # Windows (PowerShell) — vale apenas para a sessão atual
+> # Windows (PowerShell)
 > $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\caminho\para\DataMaster_F1RST\include\gcp\service_account.json"
 > ```
 >
@@ -713,18 +760,62 @@ cd DataMaster_F1RST
 >
 > Dentro do container Airflow (`astro dev start`) isso **não é necessário** — as tasks usam a Connection `gcp` configurada no [Passo 6](#passo-6-configurar-conexão-gcp-no-airflow).
 
-### Passo 3: Ajustar Project ID e Bucket (se necessário)
+### Passo 3: Criar o arquivo `.env` via terminal (sem editar código)
 
-Se o seu Project ID for diferente de `projeto-data-master` ou o bucket for diferente de `bruno_dm`, altere nos arquivos:
+Rode o comando abaixo no terminal, substituindo apenas `SEU-PROJECT-ID` e `SEU-BUCKET` pelos seus valores reais. Não é necessário abrir nenhum editor.
 
-| Arquivo | O que alterar |
+**Linux/macOS:**
+
+```bash
+cat > .env << 'EOF'
+GCP_PROJECT_ID=SEU-PROJECT-ID
+GCS_BUCKET=SEU-BUCKET
+GCP_KEYFILE_PATH=/usr/local/airflow/include/gcp/service_account.json
+AIRFLOW_CONN_GCP={"conn_type": "google_cloud_platform", "extra": {"key_path": "/usr/local/airflow/include/gcp/service_account.json"}}
+EOF
+```
+
+**Windows (PowerShell):**
+
+```powershell
+@"
+GCP_PROJECT_ID=SEU-PROJECT-ID
+GCS_BUCKET=SEU-BUCKET
+GCP_KEYFILE_PATH=/usr/local/airflow/include/gcp/service_account.json
+AIRFLOW_CONN_GCP={"conn_type": "google_cloud_platform", "extra": {"key_path": "/usr/local/airflow/include/gcp/service_account.json"}}
+"@ | Out-File -FilePath .env -Encoding utf8
+```
+
+Pronto. O `.env` gerado faz o Astro CLI carregar tudo automaticamente ao rodar `astro dev start`:
+
+| Ferramenta | Como recebe a configuração |
 | --- | --- |
-| `include/dbt/profiles.yml` | Campo `project` |
-| `include/dbt/models/sources/sources.yml` | Campo `database` em cada source |
-| `dags/capag.py` | Variável `GCS_BUCKET` no topo do arquivo |
-| `infra/variables.tf` | Defaults de `project_id` e `gcs_bucket_name` |
+| Airflow / DAG | `.env` carregado automaticamente pelo Astro CLI nos containers |
+| dbt (dentro do Airflow) | `.env` lido pelo `profiles.yml` via `env_var()` |
+| Airflow Connection `gcp` | `AIRFLOW_CONN_GCP` no `.env` — registrada automaticamente, **sem precisar da UI** |
+| Terraform (`make infra-*`) | Makefile auto-exporta `GOOGLE_APPLICATION_CREDENTIALS` se o arquivo existir |
+
+> **O que é `AIRFLOW_CONN_GCP`?** O Airflow reconhece variáveis de ambiente no formato `AIRFLOW_CONN_<ID>` e registra a conexão automaticamente ao iniciar — isso **elimina o Passo 6** (configuração manual na UI do Airflow). A linha com `GCP_KEYFILE_PATH` aponta para o mesmo JSON dentro do container (`/usr/local/airflow/include/gcp/...`) porque o diretório `include/` da sua máquina é montado nesse caminho.
+
+> **Resumo do que cada pessoa precisa para reproduzir:** conta GCP (BigQuery + GCS habilitados), arquivo `service_account.json` copiado para `include/gcp/`, um único comando de terminal para criar o `.env`, e as ferramentas: Docker Desktop, Astro CLI e Terraform.
 
 ### Passo 4: Provisionar infraestrutura (Terraform)
+
+Primeiro, crie o arquivo de variáveis do Terraform (equivalente Terraform do `.env`):
+
+**Linux/macOS:**
+```bash
+cp infra/terraform.tfvars.example infra/terraform.tfvars
+```
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item infra/terraform.tfvars.example infra/terraform.tfvars
+```
+
+Abra `infra/terraform.tfvars` e substitua `project_id` e `gcs_bucket_name` pelos seus valores — o arquivo já está documentado com todas as opções disponíveis (IAM, WIF, Secret Manager são opt-in e ficam comentados por padrão).
+
+Depois, provisione a infraestrutura:
 
 ```bash
 # Inicializa o Terraform (primeira vez)
@@ -738,8 +829,8 @@ make infra-apply
 ```
 
 **O que é criado automaticamente:**
-- 1 bucket GCS com versionamento e lifecycle policies
-- 6 datasets BigQuery: `capag`, `cidades`, `pib`, `bronze`, `silver`, `gold`
+- 1 bucket GCS com versionamento habilitado e lifecycle policies (Nearline após 90 dias, limpeza de versões antigas após 365 dias)
+- 6 datasets BigQuery: `capag`, `cidades`, `pib`, `bronze`, `silver`, `gold` — com labels por camada e IAM granular pré-configurado
 
 ### Passo 5: Iniciar o ambiente (Airflow + Metabase)
 
@@ -755,7 +846,11 @@ Isso inicia todos os containers:
 
 > **Nota:** Na primeira vez, o build da imagem Docker pode levar alguns minutos (instala dbt_venv + dependências).
 
-### Passo 6: Configurar conexão GCP no Airflow
+### Passo 6: Conexão GCP no Airflow
+
+**Se você criou o `.env` conforme o Passo 3**, a conexão `gcp` já está registrada automaticamente via `AIRFLOW_CONN_GCP` — **nenhuma ação necessária**, pode pular para o Passo 7.
+
+Caso precise configurar manualmente (ex: se não usou o `.env` ou quer sobrescrever):
 
 1. Acesse http://localhost:8080 (user: `admin`, senha: `admin`)
 2. Vá em **Admin** → **Connections** → **+** (Add Connection)
@@ -814,14 +909,26 @@ Após a DAG completar com sucesso, valide:
 ```bash
 make help              # Lista todos os comandos disponíveis
 make setup             # Setup completo (Terraform + Airflow + Metabase)
+
+# Infraestrutura (Terraform)
 make infra-init        # terraform init (primeira vez)
-make infra-plan        # terraform plan (preview)
+make infra-plan        # terraform plan (preview do que será criado)
 make infra-apply       # terraform apply (cria infra no GCP)
+make infra-destroy     # Destrói toda a infraestrutura GCP (CUIDADO!)
+make infra-fmt         # Formata os arquivos .tf com terraform fmt
+
+# Airflow e Metabase
 make airflow-start     # Inicia Airflow + Metabase via Docker
-make airflow-stop      # Para os containers
+make airflow-stop      # Para os containers (preserva dados)
 make airflow-restart   # Reinicia os containers
+
+# dbt
 make dbt-compile       # Valida SQL dos modelos dbt (sem executar)
+make dbt-full-refresh  # Recria todas as tabelas dbt do zero
 make dbt-docs          # Gera e abre documentação do dbt
+
+# Reset completo (útil para reprodutibilidade)
+make reset             # Destrói, recria infra GCP e reinicia Airflow
 ```
 
 ### Comandos para parar/limpar o ambiente
@@ -835,6 +942,65 @@ astro dev stop
 make infra-destroy
 ```
 
+### Passo 10: Publicar no GitHub e validar o CI/CD
+
+Se você está subindo o projeto pela primeira vez (ou num fork) e quer testar os workflows do GitHub Actions:
+
+**1. Subir o código para o Git:**
+
+```bash
+# Verificar o que será incluído (nunca commitar service_account.json ou .env)
+git status
+git add .
+git commit -m "feat: setup inicial do projeto DataMaster"
+git push origin main
+```
+
+> **Atenção:** confirme antes de fazer push que `include/gcp/service_account.json` e `.env` estão no `.gitignore` e **não aparecem** no `git status`. Esses arquivos contêm credenciais e nunca devem ir para o repositório.
+
+**2. Verificar o resultado no GitHub Actions:**
+
+1. Acesse o repositório no GitHub → aba **Actions**
+2. Dois workflows são disparados automaticamente:
+   - **"CI - Pipeline de Dados"** → roda em qualquer push que não seja em `infra/` ou `.md`
+   - **"Terraform - Infraestrutura"** → só roda quando há mudanças em `infra/`
+
+3. O workflow CI executa **3 jobs sem nenhuma configuração prévia**:
+
+| Job | O que valida | Credencial GCP? |
+| --- | --- | --- |
+| `dbt-validate` | `dbt deps` + `dbt parse` (SQL e YAML dos modelos) | Não |
+| `docker-build` | Dockerfile compila sem erros | Não |
+| `python-lint` | flake8 nos scripts Python | Não |
+
+**3. Testar o fluxo de Pull Request:**
+
+```bash
+# Crie uma branch
+git checkout -b chore/teste-ci
+
+# Faça qualquer pequena alteração (ex: adicionar um comentário)
+# Depois:
+git add .
+git commit -m "test: validar CI"
+git push origin chore/teste-ci
+```
+
+Abra um Pull Request no GitHub. O CI roda automaticamente e exibe ✅ ou ❌ na página do PR antes do merge. Se todos os checks passarem, o código está pronto para incorporar à `main`.
+
+**4. Habilitar Terraform apply automático (opcional):**
+
+Para que o GitHub Actions aplique infraestrutura automaticamente em push na main, configure em **Settings → Secrets and variables → Actions → Variables** do repositório:
+
+| Variable | O que colocar |
+| --- | --- |
+| `GCP_PROJECT_ID` | ID do projeto GCP |
+| `GCP_WIF_PROVIDER` | Provider WIF (veja [Seção 10](#configuração-do-github-secrets-e-variables)) |
+| `GCP_WIF_SERVICE_ACCOUNT` | SA impersonada pelo WIF |
+| `TERRAFORM_APPLY_ENABLED` | `true` |
+
+Sem essa configuração, o Terraform plan ainda roda no CI (mostra o que seria criado), mas o apply não é executado — o apply fica manual via `make infra-apply`.
+
 ---
 
 ## 12. Stack Tecnológica
@@ -842,20 +1008,23 @@ make infra-destroy
 | Tecnologia | Versão | Uso |
 | --- | --- | --- |
 | **Docker** | — | Containerização do ambiente |
-| **Astro CLI / Runtime** | 8.8.0 | Gerenciamento do Airflow |
+| **Astro CLI / Runtime** | 12.7.1 | Gerenciamento do Airflow |
 | **Apache Airflow** | 2.x (TaskFlow API) | Orquestração do pipeline |
-| **astronomer-cosmos** | 1.0.3 | Integração Airflow ↔ dbt (DbtTaskGroup) |
-| **Google Cloud Storage** | — | Armazenamento dos arquivos CSV (raw layer) |
+| **astronomer-cosmos** | 1.8.0 | Integração Airflow ↔ dbt (DbtTaskGroup) |
+| **astro-sdk-python** | 1.8.1 | Operadores de carga GCS → BigQuery (aql.load_file) |
+| **Google Cloud Storage** | — | Armazenamento dos arquivos CSV (raw layer) + versionamento de objetos |
 | **BigQuery** | — | Data warehouse (datasets: capag, cidades, pib, bronze, silver, gold) |
-| **dbt-bigquery** | 1.5.3 | Transformação (Arquitetura Medalhão) + testes de qualidade |
+| **dbt-bigquery** | 1.8.3 | Transformação (Arquitetura Medalhão) + testes de qualidade |
 | **dbt-utils** | 1.1.1 | Macros auxiliares (generate_surrogate_key, accepted_range) |
-| **Terraform** | 1.7.0 | Infraestrutura como Código (GCS bucket, BigQuery datasets) |
+| **Terraform** | >= 1.5.0 | Infraestrutura como Código (GCS, BigQuery, IAM, WIF, Secret Manager) |
 | **GitHub Actions** | — | CI/CD (validação dbt + deploy Terraform) |
 | **Metabase** | 0.50.24 | Dashboards interativos |
 | **Python** | — | Download automático, geração de insights |
 | **openpyxl** | — | Leitura de XLSX (CAPAG) |
-| **requests** | — | Chamadas HTTP às APIs (Tesouro Transparente/CKAN, SIDRA, IBGE) |
+| **requests** | — | Chamadas HTTP às APIs (Tesouro Transparente/CKAN, IBGE Localidades) |
+| **sidrapy** | — | Consumo da API SIDRA/IBGE (tabela 5938 — PIB Municipal) |
 | **google-cloud-storage** | — | Upload de CSVs e verificação incremental no GCS |
+| **protobuf** | >= 4.25 | Serialização Protocol Buffers (dependência do google-cloud) |
 | **Make** | — | Atalhos para comandos do projeto (`make infra-plan`, `make airflow-start`) |
 
 ### Estrutura do Projeto
@@ -863,45 +1032,51 @@ make infra-destroy
 ```
 DataMaster_F1RST/
 ├── dags/
-│   └── capag.py                           # DAG principal
+│   └── capag.py                           # DAG principal (TaskFlow API + DbtTaskGroup)
 ├── include/
 │   ├── dataset/
-│   │   ├── download_capag.py              # Download automático CAPAG (incremental)
-│   │   ├── download_cidades.py            # Download automático municípios (API IBGE)
-│   │   ├── download_pib.py                # Download automático PIB Municipal (incremental)
+│   │   ├── download_capag.py              # Download CAPAG (incremental, API CKAN/Tesouro)
+│   │   ├── download_cidades.py            # Download municípios (API IBGE Localidades)
+│   │   ├── download_pib.py                # Download PIB Municipal (incremental, API SIDRA)
 │   │   └── gcs_utils.py                   # Utils: verificação de anos no GCS
 │   ├── dbt/
-│   │   ├── dbt_project.yml                # Config medalhão (schemas, tags, materialização)
-│   │   ├── profiles.yml                   # Conexão BigQuery
+│   │   ├── dbt_project.yml                # Config medalhão (schemas, materialização, lookback)
+│   │   ├── profiles.yml                   # Conexão BigQuery via env_var()
 │   │   ├── packages.yml                   # dbt_utils 1.1.1
-│   │   ├── cosmos_config.py               # Integração Airflow-dbt (ProfileConfig, ProjectConfig)
+│   │   ├── cosmos_config.py               # ProfileConfig + ProjectConfig + ExecutionConfig
 │   │   ├── macros/
 │   │   │   └── generate_schema_name.sql   # Schema customizado por camada
 │   │   ├── models/
-│   │   │   ├── sources/sources.yml        # 3 fontes de dados
-│   │   │   ├── bronze/                    # 3 views + _bronze__models.yml
+│   │   │   ├── sources/sources.yml        # 3 fontes de dados (raw BigQuery)
+│   │   │   ├── bronze/                    # 3 tabelas incrementais + _bronze__models.yml
 │   │   │   ├── silver/                    # 5 tabelas + _silver__models.yml
-│   │   │   └── gold/                      # 10 tabelas + _gold__models.yml
-│   │   └── tests/                         # 5 testes singulares
+│   │   │   ├── gold/                      # 10 tabelas + _gold__models.yml
+│   │   │   └── transform/                 # ⚠️ Modelos legados da arquitetura anterior (não usados pela DAG)
+│   │   └── tests/                         # Testes singulares por camada
 │   ├── insights/
-│   │   └── generate_insights.py           # Agente de insights automáticos
+│   │   └── generate_insights.py           # Agente de insights (suporta keyfile ou ADC/WIF)
 │   ├── metabase-data/
-│   │   └── queries_metabase.sql           # Queries SQL para os dashboards do Metabase
+│   │   └── queries_metabase.sql           # Queries SQL documentadas para o Metabase
 │   └── gcp/
-│       └── service_account.json           # Credenciais GCP (não commitado)
+│       └── service_account.json           # Credenciais GCP (gitignored — nunca commitado)
 ├── infra/
-│   ├── main.tf                            # Provider GCP, bucket GCS, datasets BigQuery
-│   ├── variables.tf                       # Variáveis centralizadas (project_id, region, bucket)
-│   └── outputs.tf                         # Outputs (URLs, dataset IDs)
+│   ├── main.tf                            # Provider + GCS + BQ datasets + IAM + WIF + Secret Manager + Policy Tags
+│   ├── variables.tf                       # Todas as variáveis com defaults documentados
+│   ├── outputs.tf                         # Outputs: bucket URL, dataset IDs, WIF config
+│   ├── terraform.tfvars.example           # Template de valores por ambiente
+│   └── terraform.tfvars                   # Valores reais (gitignored — nunca commitado)
 ├── .github/workflows/
-│   ├── ci.yml                             # CI: validação dbt (parse + deps)
-│   └── terraform.yml                      # CD: Terraform plan (PR) / apply (merge)
-├── Dockerfile                             # Astro Runtime 8.8.0 + dbt_venv
-├── docker-compose.override.yml            # Metabase 0.50.24 (porta 3000)
-├── Makefile                               # Atalhos: make infra-plan, make airflow-start, etc.
-├── requirements.txt                       # Dependências Python
+│   ├── ci.yml                             # CI: dbt-validate + docker-build + python-lint + dbt-integration (opt-in)
+│   └── terraform.yml                      # CD: Terraform format/validate + plan (PR) + apply (merge, opt-in)
+├── Dockerfile                             # Astro Runtime 12.7.1 + dbt_venv (dbt-bigquery 1.8.3)
+├── docker-compose.override.yml            # Metabase 0.50.24 (porta 3000, mem_limit 1g)
+├── Makefile                               # Atalhos: make infra-plan, make airflow-start, make reset, etc.
+├── requirements.txt                       # Dependências Python (cosmos 1.8.0, protobuf >=4.25, sidrapy)
+├── .env.example                           # Template de variáveis de ambiente (copiar para .env)
 └── README.md                              # Este arquivo
 ```
+
+> **Sobre os modelos em `transform/`:** são 4 modelos da arquitetura anterior ao medalhão (`dim_classificacao_capag`, `dim_instituicoes`, `dim_uf`, `fato_indicadores`). A DAG **não os executa** (seleciona apenas `path:models/bronze`, `path:models/silver`, `path:models/gold`), mas o dbt os conhece. Para evitar confusão, eles podem ser removidos do projeto sem impacto no pipeline.
 
 ---
 
