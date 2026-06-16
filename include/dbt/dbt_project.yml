@@ -7,7 +7,8 @@ profile: 'capag'
 models:
   capag:
     bronze:
-      +materialized: view
+      +materialized: incremental
+      +incremental_strategy: insert_overwrite
       +schema: bronze
       +tags: ['bronze']
     silver:
@@ -20,4 +21,6 @@ models:
       +tags: ['gold']
 
 vars:
-  projeto_id: 'projeto-data-master'
+  project_id: "projeto-data-master"
+  projeto_id: "projeto-data-master"
+  incremental_lookback_years: 1

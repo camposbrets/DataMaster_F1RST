@@ -7,8 +7,12 @@ Fontes: CAPAG (Tesouro Nacional) + PIB Municipal (IBGE)
 
 from airflow.decorators import dag, task
 from datetime import datetime, timedelta
+import json
 import logging
+import os
+import urllib.request
 
+from airflow.models import Variable
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 from airflow.providers.google.cloud.operators.bigquery import BigQueryCreateEmptyDatasetOperator
 
@@ -20,7 +24,7 @@ from airflow.models.baseoperator import chain
 from astro.sql.table import Table, Metadata
 from astro.constants import FileType
 
-from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG
+from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG, DBT_EXECUTION_CONFIG
 from cosmos.airflow.task_group import DbtTaskGroup
 from cosmos.constants import LoadMode, TestBehavior
 from cosmos.config import RenderConfig
@@ -30,10 +34,11 @@ log = logging.getLogger(__name__)
 # =============================================
 # CONFIGURACOES
 # =============================================
-GCP_CONN_ID = 'gcp'
-GCS_BUCKET = 'bruno_dm'
-PROJECT_ID = 'projeto-data-master'
-BASE_PATH = '/usr/local/airflow'
+GCP_CONN_ID = os.getenv('AIRFLOW_GCP_CONN_ID', 'gcp')
+GCS_BUCKET = os.getenv('GCS_BUCKET', 'bruno_dm')
+PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'projeto-data-master')
+BASE_PATH = os.getenv('AIRFLOW_BASE_PATH', '/usr/local/airflow')
+SLACK_WEBHOOK_CONN_ID = os.getenv('AIRFLOW_SLACK_WEBHOOK_CONN_ID', 'slack_webhook')
 
 # Retry padrao para tasks que dependem de rede/API
 DEFAULT_RETRY_ARGS = {
@@ -44,13 +49,40 @@ DEFAULT_RETRY_ARGS = {
 
 def on_failure_callback(context):
     """Callback executado quando uma task falha.
-    Em producao, aqui entraria notificacao via Slack/email."""
+    Envia notificacao via Slack quando configurada e nunca quebra a falha original."""
     task_instance = context['task_instance']
-    log.error(
+    message = (
         f"FALHA na task '{task_instance.task_id}' "
         f"da DAG '{task_instance.dag_id}' "
         f"na execucao {context['execution_date']}"
     )
+    log.error(message)
+
+    try:
+        webhook_url = os.getenv('AIRFLOW_SLACK_WEBHOOK_URL') or Variable.get(
+            'slack_webhook_url', default_var=None
+        )
+    except Exception as exc:
+        log.warning('Nao foi possivel ler a configuracao de Slack: %s', exc)
+        return
+
+    if not webhook_url:
+        log.info('Slack notification nao configurado; ignorando notificacao.')
+        return
+
+    try:
+        payload = {'text': message}
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            response.read()
+        log.info('Notificacao Slack enviada com sucesso.')
+    except Exception as exc:
+        log.warning('Falha ao enviar notificacao Slack; degradando graciosamente: %s', exc)
 
 
 @dag(
@@ -167,36 +199,42 @@ def capag():
     create_capag_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_capag_dataset',
         dataset_id='capag',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
     create_cidades_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_cidades_dataset',
         dataset_id='cidades',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
     create_pib_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_pib_dataset',
         dataset_id='pib',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
     create_bronze_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_bronze_dataset',
         dataset_id='bronze',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
     create_silver_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_silver_dataset',
         dataset_id='silver',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
     create_gold_dataset = BigQueryCreateEmptyDatasetOperator(
         task_id='create_gold_dataset',
         dataset_id='gold',
+        project_id=PROJECT_ID,
         gcp_conn_id=GCP_CONN_ID,
     )
 
@@ -204,6 +242,9 @@ def capag():
     # GCS -> BIGQUERY (RAW)
     # =============================================
 
+    # As cargas raw sao intencionalmente idempotentes: substituem o snapshot atual para a
+    # extracao mais recente. O historico e preservado pelo versionamento de objetos no GCS
+    # e pela camada Bronze append-only.
     gcs_to_raw_capag = aql.load_file(
         task_id='gcs_to_raw_capag',
         input_file=File(
@@ -257,6 +298,7 @@ def capag():
         group_id='bronze',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/bronze'],
@@ -271,8 +313,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/bronze',
+            [dbt_executable, 'test', '--select', 'path:models/bronze',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -291,6 +334,7 @@ def capag():
         group_id='silver',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/silver'],
@@ -305,8 +349,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/silver',
+            [dbt_executable, 'test', '--select', 'path:models/silver',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -325,6 +370,7 @@ def capag():
         group_id='gold',
         project_config=DBT_PROJECT_CONFIG,
         profile_config=DBT_CONFIG,
+        execution_config=DBT_EXECUTION_CONFIG,
         render_config=RenderConfig(
             load_method=LoadMode.CUSTOM,
             select=['path:models/gold'],
@@ -339,8 +385,9 @@ def capag():
         Testes com severity=warn apenas emitem alertas."""
         import subprocess
         BASE_PATH = '/usr/local/airflow'
+        dbt_executable = f'{BASE_PATH}/dbt_venv/bin/dbt'
         result = subprocess.run(
-            ['dbt', 'test', '--select', 'path:models/gold',
+            [dbt_executable, 'test', '--select', 'path:models/gold',
              '--project-dir', f'{BASE_PATH}/include/dbt',
              '--profiles-dir', f'{BASE_PATH}/include/dbt'],
             capture_output=True, text=True
@@ -360,7 +407,7 @@ def capag():
         """Gera relatorio de insights automaticos a partir das tabelas gold."""
         from include.insights.generate_insights import generate_all_insights
         report = generate_all_insights(
-            credentials_path=f'{BASE_PATH}/include/gcp/service_account.json'
+            credentials_path=os.getenv('GCP_KEYFILE_PATH')  # None -> Application Default Credentials (WIF)
         )
         return report['total_insights']
 

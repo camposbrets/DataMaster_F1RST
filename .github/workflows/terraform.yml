@@ -2,27 +2,37 @@
 # CI/CD - Terraform (Infraestrutura como Codigo)
 # =============================================
 # Dispara apenas quando arquivos em infra/ mudam.
-# Em Pull Request: mostra o plano (o que vai mudar).
-# Em merge na main: aplica as mudancas no GCP.
+# Portoes obrigatorios: formatacao e validacao.
+# Plan em pull request e apply em merge da main, opt-in via vars.
+# Auth: Service Account Key via secret GCP_SA_KEY.
 # =============================================
 
 name: "Terraform - Infraestrutura"
 
 on:
-  push:
-    branches: [main]
-    paths: ["infra/**"]
   pull_request:
     branches: [main]
-    paths: ["infra/**"]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+  id-token: write
 
 env:
   TF_VERSION: "1.7.0"
   WORKING_DIR: infra
+  TF_IN_AUTOMATION: "true"
 
 jobs:
-  terraform:
-    name: "Terraform Plan & Apply"
+  terraform-checks:
+    name: "Terraform format + validate"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,27 +47,86 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Autenticar no GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Terraform Init
-        run: terraform init
-
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: |
+          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
+          else
+            terraform init -input=false -reconfigure
+          fi
 
       - name: Terraform Validate
         run: terraform validate
 
-      # Em Pull Request: mostra o que vai mudar (sem aplicar)
-      - name: Terraform Plan
-        if: github.event_name == 'pull_request'
-        run: terraform plan -no-color -input=false
-        continue-on-error: true
+  terraform-plan:
+    name: "Terraform plan"
+    needs: terraform-checks
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
 
-      # Em merge na main: aplica de fato
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Terraform Init
+        run: |
+          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
+          else
+            terraform init -input=false -reconfigure
+          fi
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -input=false -lock=false
+
+  terraform-apply:
+    name: "Terraform apply"
+    needs: terraform-plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_APPLY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Terraform Init
+        run: |
+          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
+            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
+          else
+            terraform init -input=false -reconfigure
+          fi
+
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false -lock=false

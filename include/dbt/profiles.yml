@@ -1,12 +1,12 @@
 capag:
- target: dev
- outputs:
-  dev:
-    type: bigquery
-    method: service-account
-    keyfile: /usr/local/airflow/include/gcp/service_account.json
-    project: projeto-data-master
-    dataset: capag
-    threads: 1
-    timeout_seconds: 800
-    location: US
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      keyfile: "{{ env_var('GCP_KEYFILE_PATH', '/usr/local/airflow/include/gcp/service_account.json') }}"
+      project: "{{ env_var('GCP_PROJECT_ID', 'projeto-data-master') }}"
+      dataset: "{{ env_var('DBT_DATASET', 'capag') }}"
+      threads: 1
+      timeout_seconds: 800
+      location: US

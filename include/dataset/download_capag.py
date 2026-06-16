@@ -370,8 +370,8 @@ def download_and_merge(output_path=None):
 
     new_data = pd.concat(all_dfs, ignore_index=True)
 
-    # Limpa valores nulos (convertidos para "nan" ou "None" na stringificacao)
-    new_data = new_data.replace({'nan': '', 'None': '', 'none': ''})
+    # Limpa valores nulos e marcadores de indisponibilidade da fonte
+    new_data = new_data.replace({'nan': '', 'None': '', 'none': '', 'n.d.': ''})
 
     # Garante que ANO_BASE seja inteiro limpo
     new_data['ANO_BASE'] = new_data['ANO_BASE'].apply(

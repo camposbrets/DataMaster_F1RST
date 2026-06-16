@@ -1,6 +1,7 @@
 # Astro Runtime includes the following pre-installed providers packages: https://docs.astronomer.io/astro/runtime-image-architecture#provider-packages
-astronomer-cosmos[dbt-bigquery]==1.0.3
-protobuf==3.20.0
+astronomer-cosmos==1.8.0
+astro-sdk-python==1.8.1
+protobuf>=4.25
 openpyxl
 requests
 sidrapy

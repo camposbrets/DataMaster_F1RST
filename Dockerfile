@@ -1,4 +1,4 @@
-FROM quay.io/astronomer/astro-runtime:8.8.0
+FROM quay.io/astronomer/astro-runtime:12.7.1
 
-RUN python -m venv dbt_venv && source dbt_venv/bin/activate && \
-    pip install --no-cache-dir dbt-bigquery==1.5.3 && deactivate
+RUN python -m venv dbt_venv && . dbt_venv/bin/activate && \
+    python -m pip install --no-cache-dir "dbt-bigquery==1.8.3" && deactivate
