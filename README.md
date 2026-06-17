@@ -608,7 +608,7 @@ Todos os recursos estão declarados em `main.tf`, organizado em blocos temático
 | `google_secret_manager_secret` | Segredo no Secret Manager — **opt-in** via `enable_secret_manager = true` |
 | `google_data_catalog_taxonomy` + `google_data_catalog_policy_tag` | Policy tags para colunas sensíveis no BigQuery — **opt-in** via `enable_policy_tags = true` |
 
-**Terraform state (backend remoto GCS):** o state é mantido em um **bucket GCS dedicado** (`backend "gcs"` em `main.tf`), separado do bucket de dados. Isso atende ao feedback das bancas (item #2) — antes o state era local e o `apply` rodava em runner efêmero sem persistência, causando recriação/conflito (erro 409) a cada execução do CI. O bucket de state é informado no `terraform init` via `-backend-config` (parametrizado pela variável de repositório `TF_STATE_BUCKET` no CI e pelo Makefile localmente), nunca fica hardcoded no código.
+**Terraform state (backend remoto GCS):** o state é mantido em um **bucket GCS dedicado** (`backend "gcs"` em `main.tf`), separado do bucket de dados. Com state remoto, o `apply` no CI tem persistência entre execuções — evitando recriação/conflito (erro 409) que ocorreria com state efêmero em runner. O bucket de state é informado no `terraform init` via `-backend-config` (parametrizado pela variável de repositório `TF_STATE_BUCKET` no CI e pelo Makefile localmente), nunca fica hardcoded no código.
 
 > **Reprodução:** quem clona o projeto cria o próprio bucket de state com **um comando** (`gsutil mb` / `gcloud storage buckets create`) e roda `make infra-init` — o Makefile já injeta o `-backend-config`. Detalhes no [Passo 4 da reprodução](#passo-4-provisionar-infraestrutura-terraform).
 
@@ -678,7 +678,7 @@ Executa `dbt build` completo e gera documentação com autenticação real no GC
 
 **Dispara em:** push ou Pull Request na branch `main` que alterem arquivos em `infra/` (ou o próprio workflow).
 
-Executa **3 jobs em cadeia**, com autenticação no GCP via **Workload Identity Federation (WIF) — sem chave JSON** (atende ao feedback das bancas, item #7):
+Executa **3 jobs em cadeia**, com autenticação no GCP via **Workload Identity Federation (WIF) — sem chave JSON**:
 
 | Job | O que faz | Credencial GCP? | Quando roda |
 | --- | --- | --- | --- |
@@ -811,7 +811,7 @@ Pronto. O `.env` gerado faz o Astro CLI carregar tudo automaticamente ao rodar `
 
 ### Passo 4: Provisionar infraestrutura (Terraform)
 
-**4.1 — Criar o bucket de state remoto (uma vez).** O Terraform guarda o state em um bucket GCS dedicado (boas práticas — atende ao feedback das bancas, item #2). Crie-o com **um comando** e registre o nome no `.env` (chave `TF_STATE_BUCKET`, já incluída no template):
+**4.1 — Criar o bucket de state remoto (uma vez).** O Terraform guarda o state em um bucket GCS dedicado (boa prática de governança). Crie-o com **um comando** e registre o nome no `.env` (chave `TF_STATE_BUCKET`, já incluída no template):
 
 ```bash
 # Troque "seu-projeto" pelo seu Project ID. O nome do bucket precisa ser único no GCP.
@@ -1011,7 +1011,7 @@ Abra um Pull Request no GitHub. O CI roda automaticamente e exibe ✅ ou ❌ na 
 
 ### Bootstrap do CI/CD (Workload Identity Federation)
 
-> Esta etapa é **opcional e feita uma única vez pelo dono do repositório** — **não** faz parte da reprodução local. Ela habilita o `terraform plan`/`apply` automático no GitHub Actions autenticando via **WIF (sem nenhuma chave JSON no GitHub)**, conforme o feedback das bancas (item #7). Um avaliador que só queira reproduzir o pipeline localmente pode pular esta seção.
+> Esta etapa é **opcional e feita uma única vez pelo dono do repositório** — **não** faz parte da reprodução local. Ela habilita o `terraform plan`/`apply` automático no GitHub Actions autenticando via **WIF (sem nenhuma chave JSON no GitHub)**. Um avaliador que só queira reproduzir o pipeline localmente pode pular esta seção.
 
 **1. Habilitar o WIF no Terraform.** No `infra/terraform.tfvars`, ative:
 
