@@ -11,13 +11,7 @@ terraform {
     }
   }
 
-  # Backend local para dev/demo (state em infra/terraform.tfstate).
-  # Para producao, substituir por:
-  #   backend "gcs" {
-  #     bucket = "<BUCKET_DE_STATE_SEPARADO>"
-  #     prefix = "terraform/state"
-  #   }
-  backend "local" {}
+  backend "gcs" {}
 }
 
 provider "google" {
