@@ -47,6 +47,12 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
