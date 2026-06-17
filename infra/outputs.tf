@@ -28,6 +28,19 @@ output "wif_configuration" {
   } : null
 }
 
+# Valores prontos para colar nas GitHub Actions Variables (sem montar o path na mao):
+#   GCP_WIF_PROVIDER        <- github_wif_provider
+#   GCP_WIF_SERVICE_ACCOUNT <- github_wif_service_account
+output "github_wif_provider" {
+  description = "Nome completo do provider WIF (valor da variavel GCP_WIF_PROVIDER no GitHub)"
+  value       = var.github_actions_wif_enabled ? google_iam_workload_identity_pool_provider.github_actions[0].name : null
+}
+
+output "github_wif_service_account" {
+  description = "Email da SA impersonada pelo WIF (valor da variavel GCP_WIF_SERVICE_ACCOUNT no GitHub)"
+  value       = var.github_actions_wif_enabled ? google_service_account.github_actions[0].email : null
+}
+
 output "secret_manager_secret_id" {
   description = "ID do segredo criado no Secret Manager, quando habilitado"
   value       = var.enable_secret_manager ? google_secret_manager_secret.this[0].secret_id : null

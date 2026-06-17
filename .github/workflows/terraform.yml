@@ -2,9 +2,9 @@
 # CI/CD - Terraform (Infraestrutura como Codigo)
 # =============================================
 # Dispara apenas quando arquivos em infra/ mudam.
-# Portoes obrigatorios: formatacao e validacao.
+# Portoes obrigatorios: formatacao e validacao (sem credenciais).
 # Plan em pull request e apply em merge da main, opt-in via vars.
-# Auth: Service Account Key via secret GCP_SA_KEY.
+# Auth: Workload Identity Federation (WIF) — sem chave JSON.
 # =============================================
 
 name: "Terraform - Infraestrutura"
@@ -56,13 +56,9 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
-      - name: Terraform Init
-        run: |
-          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
-            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
-          else
-            terraform init -input=false -reconfigure
-          fi
+      # init sem backend: valida sintaxe/refs sem precisar de credenciais nem do bucket de state
+      - name: Terraform Init (sem backend)
+        run: terraform init -input=false -backend=false
 
       - name: Terraform Validate
         run: terraform validate
@@ -70,7 +66,7 @@ jobs:
   terraform-plan:
     name: "Terraform plan"
     needs: terraform-checks
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: vars.GCP_WIF_PROVIDER != '' && vars.GCP_WIF_SERVICE_ACCOUNT != ''
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -85,7 +81,7 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Autenticar no Google Cloud
+      - name: Autenticar no Google Cloud via WIF
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -93,11 +89,9 @@ jobs:
 
       - name: Terraform Init
         run: |
-          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
-            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
-          else
-            terraform init -input=false -reconfigure
-          fi
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
 
       - name: Terraform Plan
         run: terraform plan -no-color -input=false -lock=false
@@ -128,11 +122,9 @@ jobs:
 
       - name: Terraform Init
         run: |
-          if [ -n "${{ vars.TF_STATE_BUCKET }}" ]; then
-            terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
-          else
-            terraform init -input=false -reconfigure
-          fi
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=${{ vars.TF_STATE_PREFIX || 'terraform/state' }}"
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false -lock=false
