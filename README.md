@@ -69,7 +69,6 @@ Os dados são obtidos do **IBGE** (tabela SIDRA 5938), que publica o PIB de todo
                     ┌──────────────────────────────────────┐
                     │        GitHub Actions (CI/CD)        │
                     │  ci.yml: dbt + Docker + Python lint  │
-                    │  terraform.yml: plan (PR) / apply    │
                     └──────────────────┬───────────────────┘
                                        │
 ┌──────────────────────────────────────────────────────────────┐
@@ -609,7 +608,9 @@ Todos os recursos estão declarados em `main.tf`, organizado em blocos temático
 | `google_secret_manager_secret` | Segredo no Secret Manager — **opt-in** via `enable_secret_manager = true` |
 | `google_data_catalog_taxonomy` + `google_data_catalog_policy_tag` | Policy tags para colunas sensíveis no BigQuery — **opt-in** via `enable_policy_tags = true` |
 
-**Terraform state:** por padrão, o state é local (`infra/terraform.tfstate`, coberto pelo `.gitignore`). Para produção, descomentar o bloco `backend "gcs"` em `main.tf` e configurar um bucket separado para o state.
+**Terraform state (backend remoto GCS):** o state é mantido em um **bucket GCS dedicado** (`backend "gcs"` em `main.tf`), separado do bucket de dados. Isso atende ao feedback das bancas (item #2) — antes o state era local e o `apply` rodava em runner efêmero sem persistência, causando recriação/conflito (erro 409) a cada execução do CI. O bucket de state é informado no `terraform init` via `-backend-config` (parametrizado pela variável de repositório `TF_STATE_BUCKET` no CI e pelo Makefile localmente), nunca fica hardcoded no código.
+
+> **Reprodução:** quem clona o projeto cria o próprio bucket de state com **um comando** (`gsutil mb` / `gcloud storage buckets create`) e roda `make infra-init` — o Makefile já injeta o `-backend-config`. Detalhes no [Passo 4 da reprodução](#passo-4-provisionar-infraestrutura-terraform).
 
 ### Políticas de ciclo de vida (GCS)
 
@@ -652,6 +653,9 @@ Sem automação, erros em SQL, Python ou infraestrutura só seriam detectados **
 
 O projeto conta com **dois workflows** de CI/CD configurados em `.github/workflows/`:
 
+- **`ci.yml`** — valida o pipeline de dados (dbt, Python, Docker) a cada push/PR em código.
+- **`terraform.yml`** — valida e aplica a infraestrutura (Terraform) a cada push/PR em `infra/`.
+
 ### Workflow 1: CI - Pipeline de Dados (`ci.yml`)
 
 **Dispara em:** a cada envio de código ou abertura de Pull Request na branch `main` (ignora alterações em arquivos de infraestrutura, documentação e imagens).
@@ -670,33 +674,39 @@ Executa o flake8 (uma ferramenta de análise estática) sobre os scripts Python 
 **Job 4 — Integração dbt + BigQuery (`dbt-integration`, opcional):**
 Executa `dbt build` completo e gera documentação com autenticação real no GCP via Workload Identity Federation. Só é ativado quando a variável de repositório `DBT_INTEGRATION_ENABLED` estiver definida como `true`. Útil para validar a integração completa antes de um merge importante.
 
-### Workflow 2: Terraform - Infraestrutura (`terraform.yml`)
+### Workflow 2: CD - Terraform (`terraform.yml`)
 
-**Dispara em:** a cada envio de código ou abertura de Pull Request na branch `main`, **somente quando há alterações nos arquivos de infraestrutura** (pasta `infra/`).
+**Dispara em:** push ou Pull Request na branch `main` que alterem arquivos em `infra/` (ou o próprio workflow).
 
-Este workflow executa as seguintes etapas:
+Executa **3 jobs em cadeia**, com autenticação no GCP via **Workload Identity Federation (WIF) — sem chave JSON** (atende ao feedback das bancas, item #7):
 
-1. **Instalação e autenticação:** instala o Terraform e autentica no Google Cloud usando a credencial armazenada nos segredos (secrets) do repositório.
-2. **Validação:** verifica se os arquivos de infraestrutura estão formatados corretamente e se a configuração é válida.
-3. **Prévia das mudanças (em Pull Request):** exibe um relatório detalhado do que será criado, alterado ou removido no Google Cloud, sem aplicar nada — permitindo revisão pela equipe.
-4. **Aplicação (após aprovação):** somente quando o código é incorporado à branch principal (merge), as mudanças são efetivamente aplicadas no Google Cloud.
+| Job | O que faz | Credencial GCP? | Quando roda |
+| --- | --- | --- | --- |
+| `terraform-checks` | `fmt -check` + `validate` (init com `-backend=false`) | **Não** — valida sintaxe sem backend nem credencial | Sempre |
+| `terraform-plan` | `init` (backend GCS) + `plan` — prévia das mudanças | Sim (WIF) | Quando as `vars` de WIF estão configuradas |
+| `terraform-apply` | `init` (backend GCS) + `apply` — aplica no GCP | Sim (WIF) | Só em push na `main` **e** com `TERRAFORM_APPLY_ENABLED=true` |
+
+> **Por que o `terraform-checks` não precisa de credencial?** `fmt` e `validate` apenas conferem sintaxe e referências — não tocam no estado remoto. O `init -backend=false` pula a conexão com o bucket de state, então esse portão roda em qualquer fork **sem nenhuma configuração de GCP**. Plan e apply, que precisam do estado real, só rodam quando o WIF está configurado.
 
 ### Configuração do GitHub (Secrets e Variables)
 
-Os três jobs sempre ativos (`dbt-validate`, `docker-build`, `python-lint`) **não precisam de nenhuma credencial** — funcionam apenas com o código do repositório. O acesso ao GCP só é necessário para os jobs opcionais de Terraform apply e integração dbt.
+Os jobs de validação que **não precisam de credencial** (`dbt-validate`, `docker-build`, `python-lint` do `ci.yml` e `terraform-checks` do `terraform.yml`) funcionam apenas com o código do repositório — qualquer fork roda esses portões sem configurar nada.
 
-**Para habilitar Terraform plan/apply e integração dbt no CI**, configure em **Settings → Secrets and variables → Actions → Variables**:
+O acesso ao GCP (via **WIF, sem chave JSON**) só é necessário para: o `plan`/`apply` do Terraform e o job opcional de integração dbt. Configure em **Settings → Secrets and variables → Actions → Variables**:
 
-| Variable | Exemplo | Finalidade |
-| --- | --- | --- |
-| `GCP_PROJECT_ID` | `meu-projeto-gcp` | ID do projeto GCP (Terraform + dbt-integration) |
-| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/pool/providers/prov` | Provider do Workload Identity Federation |
-| `GCP_WIF_SERVICE_ACCOUNT` | `sa@meu-projeto.iam.gserviceaccount.com` | Service Account impersonada pelo WIF |
-| `TERRAFORM_APPLY_ENABLED` | `true` | Ativa o Terraform apply automático em push na main |
-| `DBT_INTEGRATION_ENABLED` | `true` | Ativa o job de integração dbt + BigQuery |
-| `TF_STATE_BUCKET` | `meu-bucket-state` | (Opcional) Bucket GCS para Terraform state remoto |
+| Variable | Exemplo | Usado por | Finalidade |
+| --- | --- | --- | --- |
+| `GCP_PROJECT_ID` | `meu-projeto-gcp` | ambos | ID do projeto GCP |
+| `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/pool/providers/prov` | ambos | Provider do Workload Identity Federation |
+| `GCP_WIF_SERVICE_ACCOUNT` | `sa@meu-projeto.iam.gserviceaccount.com` | ambos | Service Account impersonada pelo WIF |
+| `TF_STATE_BUCKET` | `terraform-state-meu-projeto` | `terraform.yml` | Bucket GCS do state remoto do Terraform |
+| `TF_STATE_PREFIX` | `terraform/state` | `terraform.yml` | (Opcional) prefixo do state — padrão `terraform/state` |
+| `TERRAFORM_APPLY_ENABLED` | `true` | `terraform.yml` | Libera o `apply` automático em merge na `main` |
+| `DBT_INTEGRATION_ENABLED` | `true` | `ci.yml` | Ativa o job de integração dbt + BigQuery |
 
-> **O que é Workload Identity Federation (WIF)?** É o método recomendado pelo Google para autenticar GitHub Actions no GCP sem usar chaves JSON — mais seguro e sem risco de expor credenciais. Para configurar: Console GCP → IAM → Workload Identity Pools → criar pool + provider para GitHub. O Terraform apply automático é **totalmente opcional** — o pipeline funciona localmente com `make infra-apply` sem nenhuma configuração no GitHub.
+> **Como obter os valores de WIF?** Provisione o WIF (já declarado no `infra/`, opt-in via `github_actions_wif_enabled = true`) com um `terraform apply` local — os `outputs` retornam o `GCP_WIF_PROVIDER` e o `GCP_WIF_SERVICE_ACCOUNT` prontos para colar nas Variables. Passo a passo no [Bootstrap do CI/CD (WIF)](#bootstrap-do-cicd-workload-identity-federation).
+
+> **Nenhuma chave JSON é colocada no GitHub.** A autenticação do CI é federada (OIDC → WIF). A chave `service_account.json` existe **apenas localmente** para reprodução no seu computador (ver [Seção 11](#11-reprodução-do-projeto)).
 
 > **Para rodar o projeto localmente:** basta ter o arquivo `include/gcp/service_account.json` configurado conforme descrito na [Seção 11 — Reprodução do Projeto](#11-reprodução-do-projeto). O GitHub Actions não é necessário para usar o pipeline localmente.
 
@@ -801,7 +811,17 @@ Pronto. O `.env` gerado faz o Astro CLI carregar tudo automaticamente ao rodar `
 
 ### Passo 4: Provisionar infraestrutura (Terraform)
 
-Primeiro, crie o arquivo de variáveis do Terraform (equivalente Terraform do `.env`):
+**4.1 — Criar o bucket de state remoto (uma vez).** O Terraform guarda o state em um bucket GCS dedicado (boas práticas — atende ao feedback das bancas, item #2). Crie-o com **um comando** e registre o nome no `.env` (chave `TF_STATE_BUCKET`, já incluída no template):
+
+```bash
+# Troque "seu-projeto" pelo seu Project ID. O nome do bucket precisa ser único no GCP.
+gcloud storage buckets create gs://terraform-state-seu-projeto \
+  --project=SEU-PROJECT-ID --location=US --uniform-bucket-level-access
+```
+
+> O nome desse bucket deve bater com a linha `TF_STATE_BUCKET=` do seu `.env`. O Makefile injeta esse valor no `terraform init` automaticamente — você não edita nada no código Terraform.
+
+**4.2 — Criar o arquivo de variáveis do Terraform** (equivalente Terraform do `.env`):
 
 **Linux/macOS:**
 ```bash
@@ -815,18 +835,20 @@ Copy-Item infra/terraform.tfvars.example infra/terraform.tfvars
 
 Abra `infra/terraform.tfvars` e substitua `project_id` e `gcs_bucket_name` pelos seus valores — o arquivo já está documentado com todas as opções disponíveis (IAM, WIF, Secret Manager são opt-in e ficam comentados por padrão).
 
-Depois, provisione a infraestrutura:
+**4.3 — Provisionar a infraestrutura:**
 
 ```bash
-# Inicializa o Terraform (primeira vez)
+# Inicializa o Terraform (usa o backend GCS via TF_STATE_BUCKET do .env)
 make infra-init
 
 # Visualiza o que será criado (opcional, recomendado)
 make infra-plan
 
-# Aplica — cria o bucket GCS + 6 datasets BigQuery
+# Aplica — cria o bucket GCS de dados + 6 datasets BigQuery
 make infra-apply
 ```
+
+> **Reproduzindo em um projeto GCP novo?** Não há nada para importar — o `make infra-apply` cria tudo do zero. (O `terraform import` só é necessário quando os recursos já existem no projeto de uma criação manual anterior.)
 
 **O que é criado automaticamente:**
 - 1 bucket GCS com versionamento habilitado e lifecycle policies (Nearline após 90 dias, limpeza de versões antigas após 365 dias)
@@ -961,9 +983,8 @@ git push origin main
 **2. Verificar o resultado no GitHub Actions:**
 
 1. Acesse o repositório no GitHub → aba **Actions**
-2. Dois workflows são disparados automaticamente:
+2. O workflow é disparado automaticamente:
    - **"CI - Pipeline de Dados"** → roda em qualquer push que não seja em `infra/` ou `.md`
-   - **"Terraform - Infraestrutura"** → só roda quando há mudanças em `infra/`
 
 3. O workflow CI executa **3 jobs sem nenhuma configuração prévia**:
 
@@ -988,18 +1009,59 @@ git push origin chore/teste-ci
 
 Abra um Pull Request no GitHub. O CI roda automaticamente e exibe ✅ ou ❌ na página do PR antes do merge. Se todos os checks passarem, o código está pronto para incorporar à `main`.
 
-**4. Habilitar Terraform apply automático (opcional):**
+### Bootstrap do CI/CD (Workload Identity Federation)
 
-Para que o GitHub Actions aplique infraestrutura automaticamente em push na main, configure em **Settings → Secrets and variables → Actions → Variables** do repositório:
+> Esta etapa é **opcional e feita uma única vez pelo dono do repositório** — **não** faz parte da reprodução local. Ela habilita o `terraform plan`/`apply` automático no GitHub Actions autenticando via **WIF (sem nenhuma chave JSON no GitHub)**, conforme o feedback das bancas (item #7). Um avaliador que só queira reproduzir o pipeline localmente pode pular esta seção.
 
-| Variable | O que colocar |
+**1. Habilitar o WIF no Terraform.** No `infra/terraform.tfvars`, ative:
+
+```hcl
+github_actions_wif_enabled = true
+github_repository          = "seu-usuario/seu-repo"
+```
+
+**2. Aplicar** (cria o pool, o provider OIDC e a Service Account do CI):
+
+```bash
+make infra-apply
+```
+
+**3. Conceder à SA do CI as permissões para gerenciar a infraestrutura** (Linux/macOS; no Windows/cmd rode cada `gcloud ... --role=...` em uma linha só):
+
+```bash
+SA=$(cd infra && terraform output -raw github_wif_service_account)
+for ROLE in roles/bigquery.admin roles/storage.admin roles/iam.serviceAccountAdmin roles/iam.workloadIdentityPoolAdmin; do
+  gcloud projects add-iam-policy-binding SEU-PROJECT-ID \
+    --member="serviceAccount:$SA" --role="$ROLE"
+done
+```
+
+**4. Copiar os valores prontos dos outputs** (já vêm no formato exato esperado pelo GitHub):
+
+```bash
+cd infra
+terraform output -raw github_wif_provider          # -> GCP_WIF_PROVIDER
+terraform output -raw github_wif_service_account   # -> GCP_WIF_SERVICE_ACCOUNT
+```
+
+**5. Configurar as GitHub Actions Variables** (Settings → Secrets and variables → Actions → **Variables**):
+
+| Variable | Valor |
 | --- | --- |
-| `GCP_PROJECT_ID` | ID do projeto GCP |
-| `GCP_WIF_PROVIDER` | Provider WIF (veja [Seção 10](#configuração-do-github-secrets-e-variables)) |
-| `GCP_WIF_SERVICE_ACCOUNT` | SA impersonada pelo WIF |
-| `TERRAFORM_APPLY_ENABLED` | `true` |
+| `GCP_PROJECT_ID` | seu Project ID |
+| `GCP_WIF_PROVIDER` | saída de `github_wif_provider` |
+| `GCP_WIF_SERVICE_ACCOUNT` | saída de `github_wif_service_account` |
+| `TF_STATE_BUCKET` | bucket de state criado no [Passo 4.1](#passo-4-provisionar-infraestrutura-terraform) |
+| `TERRAFORM_APPLY_ENABLED` | `true` (libera o `apply` em merge na `main`) |
 
-Sem essa configuração, o Terraform plan ainda roda no CI (mostra o que seria criado), mas o apply não é executado — o apply fica manual via `make infra-apply`.
+**6. Remover autenticação por chave JSON, se existir.** Caso você tenha configurado um secret `GCP_SA_KEY`, **apague-o** (Settings → Secrets → remover) e **revogue a chave** no GCP — o CI passa a usar WIF e não precisa mais dela:
+
+```bash
+gcloud iam service-accounts keys list  --iam-account=terraform-ci@SEU-PROJECT-ID.iam.gserviceaccount.com
+gcloud iam service-accounts keys delete KEY_ID --iam-account=terraform-ci@SEU-PROJECT-ID.iam.gserviceaccount.com
+```
+
+A partir daqui, todo PR em `infra/` roda `plan` e todo merge na `main` roda `apply` — **sem nenhuma chave JSON no GitHub**.
 
 ---
 

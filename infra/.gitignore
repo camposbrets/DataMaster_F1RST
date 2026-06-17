@@ -7,3 +7,8 @@
 # Valores de variaveis que podem conter secrets
 terraform.tfvars
 *.auto.tfvars
+
+# Chaves de Service Account (NUNCA commitar) — auth do CI usa WIF, nao chave JSON
+*.json
+*-key.json
+service_account*.json
