@@ -129,7 +129,7 @@ resource "google_iam_workload_identity_pool" "github_actions" {
   count = var.github_actions_wif_enabled ? 1 : 0
 
   workload_identity_pool_id = var.github_actions_wif_pool_id
-  display_name              = "GitHub Actions pool for ${var.github_repository}"
+  display_name              = "GitHub Actions pool"
   description               = "Workload Identity Federation para GitHub Actions"
 }
 
