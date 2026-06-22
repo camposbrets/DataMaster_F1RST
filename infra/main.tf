@@ -1,6 +1,7 @@
 # =============================================
 # PROVIDER - Conecta ao Google Cloud Platform
 # =============================================
+# Recursos (bucket + datasets) sao recriados de forma idempotente pelo apply.
 terraform {
   required_version = ">= 1.5.0"
 
