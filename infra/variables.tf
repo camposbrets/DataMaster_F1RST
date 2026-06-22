@@ -129,7 +129,7 @@ variable "dataset_iam_bindings" {
 variable "github_actions_wif_enabled" {
   description = "Habilita Workload Identity Federation para o GitHub Actions"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "github_repository" {
