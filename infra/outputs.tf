@@ -1,6 +1,7 @@
 # =============================================
 # OUTPUTS - Informacoes uteis apos terraform apply
 # =============================================
+# (CI autentica no GCP via Workload Identity Federation)
 
 output "gcs_bucket_name" {
   description = "Nome do bucket GCS criado para os dados"
