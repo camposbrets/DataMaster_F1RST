@@ -21,11 +21,13 @@ lifecycle_transition_storage_class = "NEARLINE"
 lifecycle_delete_days          = 365
 lifecycle_keep_latest_versions  = 3
 
-# IAM granular
+# IAM granular por dataset (vazio por padrao p/ reproducao limpa).
+# Adicione bindings apontando para a SUA service account, se quiser:
+dataset_iam_bindings = {}
 #dataset_iam_bindings = {
 #  capag = [{
 #    role   = "roles/bigquery.dataViewer"
-#    member = "serviceAccount:bruno-dm-projeto@projeto-data-master.iam.gserviceaccount.com"
+#    member = "serviceAccount:SUA-SA@SEU-PROJETO.iam.gserviceaccount.com"
 #  }]
 #}
 

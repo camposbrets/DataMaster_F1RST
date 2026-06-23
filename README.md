@@ -727,9 +727,12 @@ Isso significa que uma terceira pessoa consegue reproduzir o ambiente em outro p
 | Docker Desktop | 4.x | `docker --version` |
 | Astro CLI | 1.x | `astro version` |
 | Terraform | 1.7+ | `terraform --version` |
+| Google Cloud SDK (`gcloud`) | recente | `gcloud --version` |
 | Git | 2.x | `git --version` |
 | Conta Google Cloud | — | Com BigQuery e GCS habilitados |
 | RAM | 16 GB | — |
+
+> O **`gcloud`** é usado para criar o bucket de state do Terraform (Passo 4) e, opcionalmente, para o bootstrap do CI/CD via WIF (apêndice). [Instalação do Google Cloud SDK](https://cloud.google.com/sdk/docs/install).
 
 ### Passo 1: Clonar o repositório
 
@@ -853,6 +856,8 @@ make infra-apply
 **O que é criado automaticamente:**
 - 1 bucket GCS com versionamento habilitado e lifecycle policies (Nearline após 90 dias, limpeza de versões antigas após 365 dias)
 - 6 datasets BigQuery: `capag`, `cidades`, `pib`, `bronze`, `silver`, `gold` — com labels por camada e IAM granular pré-configurado
+
+> **Reprodução simples não precisa de WIF.** Por padrão, o `make infra-apply` cria **só o bucket de dados + datasets** — suficiente para rodar o pipeline localmente, e por isso a SA do [Passo 2](#passo-2-configurar-a-service-account-do-gcp) só precisa de **BigQuery Admin + Storage Admin**. Os recursos de WIF (autenticação do CI sem chave) são **opt-in** e ficam para quem quiser habilitar o CI/CD — ver [Bootstrap do CI/CD (WIF)](#bootstrap-do-cicd-workload-identity-federation).
 
 ### Passo 5: Iniciar o ambiente (Airflow + Metabase)
 
@@ -1013,14 +1018,16 @@ Abra um Pull Request no GitHub. O CI roda automaticamente e exibe ✅ ou ❌ na 
 
 > Esta etapa é **opcional e feita uma única vez pelo dono do repositório** — **não** faz parte da reprodução local. Ela habilita o `terraform plan`/`apply` automático no GitHub Actions autenticando via **WIF (sem nenhuma chave JSON no GitHub)**. Um avaliador que só queira reproduzir o pipeline localmente pode pular esta seção.
 
-**1. Habilitar o WIF no Terraform.** No `infra/terraform.tfvars`, ative:
+**1. Habilitar o WIF localmente.** O default é `false` (para a reprodução simples não exigir permissões de IAM). Para o bootstrap, ative no **seu** `infra/terraform.tfvars` (gitignored) e aponte para o seu repositório:
 
 ```hcl
 github_actions_wif_enabled = true
 github_repository          = "seu-usuario/seu-repo"
 ```
 
-**2. Aplicar** (cria o pool, o provider OIDC e a Service Account do CI):
+> No CI isso já é forçado via `TF_VAR_github_actions_wif_enabled=true` (em `terraform.yml`) — você não mexe no default versionado.
+
+**2. Aplicar** (cria o pool, o provider OIDC e a Service Account do CI). Como esse apply cria recursos de **IAM**, rode autenticado **como dono do projeto** (`gcloud auth application-default login`) ou com uma SA que tenha, além de BigQuery/Storage Admin, também **`iam.serviceAccountAdmin`** e **`iam.workloadIdentityPoolAdmin`**:
 
 ```bash
 make infra-apply
