@@ -127,9 +127,9 @@ variable "dataset_iam_bindings" {
 }
 
 variable "github_actions_wif_enabled" {
-  description = "Habilita Workload Identity Federation para o GitHub Actions"
+  description = "Habilita Workload Identity Federation para o GitHub Actions (opt-in). O CI ativa via TF_VAR; reproducao local nao cria WIF por padrao."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "github_repository" {
