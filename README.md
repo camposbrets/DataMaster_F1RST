@@ -22,7 +22,7 @@
 
 Este projeto implementa um **Sistema de Monitoramento de Risco Fiscal Municipal**, cruzando dados de **CAPAG** (Capacidade de Pagamento — Tesouro Nacional) com o **PIB Municipal** (IBGE) para avaliar a saúde fiscal dos municípios brasileiros.
 
-O sistema gera um **score de risco fiscal composto (0–100)** que combina a classificação CAPAG (até 70 pts — já consolida endividamento, poupança corrente e liquidez) com o crescimento do PIB municipal (até 30 pts), classificando cada município em: **BAIXO**, **MODERADO**, **ELEVADO**, **CRÍTICO** ou **INDETERMINADO** (quando não há dados suficientes).
+O sistema gera um **score de risco fiscal composto (0–100)** que combina a classificação CAPAG (até 70 pts — já consolida endividamento, poupança corrente e liquidez) com o crescimento do PIB municipal (até 30 pts), classificando cada município em: **BAIXO**, **MODERADO**, **ELEVADO**, **CRÍTICO** ou **INDETERMINADO** (quando não há classificação CAPAG e, portanto, não há base para avaliar).
 
 ### Atualizações recentes
 
@@ -361,7 +361,7 @@ erDiagram
 
 ### Score de Risco Fiscal (0–100 pontos)
 
-O score combina dois componentes independentes. Quando apenas um componente está disponível, ele é reescalado para 0–100. Quando nenhum está disponível, o score é NULL e a classificação é INDETERMINADO.
+O score combina dois componentes independentes, mas a **classificação CAPAG é a base**: sem ela não há avaliação possível, e o município fica com score NULL e classificação INDETERMINADO. Quando há CAPAG mas não há PIB, o componente CAPAG é reescalado proporcionalmente para 0–100.
 
 | Componente | Peso | Critério |
 | --- | --- | --- |
@@ -370,12 +370,11 @@ O score combina dois componentes independentes. Quando apenas um componente est�
 
 **Comportamento adaptativo do score:**
 
-O score se adapta à disponibilidade de dados de cada município:
+O score se adapta à disponibilidade de dados de cada município, sempre a partir da CAPAG:
 
-- **Ambos disponíveis (CAPAG + PIB):** o score é a soma direta dos dois componentes, variando de 0 a 100.
-- **Apenas CAPAG disponível:** o score do CAPAG (que vai até 70) é reescalado proporcionalmente para a faixa de 0 a 100, permitindo uma classificação mesmo sem dados de PIB.
-- **Apenas PIB disponível:** o score do PIB (que vai até 30) é reescalado proporcionalmente para a faixa de 0 a 100.
-- **Nenhum disponível:** o município recebe classificação INDETERMINADO, indicando ausência de dados suficientes para avaliação.
+- **CAPAG + PIB:** o score é a soma direta dos dois componentes, variando de 0 a 100.
+- **Apenas CAPAG:** o score do CAPAG (que vai até 70) é reescalado proporcionalmente para a faixa de 0 a 100 — `round(score_capag * 100 / 70)` —, permitindo uma classificação mesmo sem dados de PIB.
+- **Sem CAPAG (com ou sem PIB):** o município recebe score NULL e classificação INDETERMINADO. O PIB isolado não sustenta uma avaliação de risco fiscal: atribuir uma faixa de risco nesse caso seria enganoso, porque a base fiscal simplesmente não existe para aquele município/ano.
 
 | Classificação | Score |
 | --- | --- |
@@ -383,7 +382,7 @@ O score se adapta à disponibilidade de dados de cada município:
 | MODERADO | ≥ 54 |
 | ELEVADO | ≥ 36 |
 | CRÍTICO | < 36 |
-| INDETERMINADO | NULL (sem dados) |
+| INDETERMINADO | NULL (sem classificação CAPAG) |
 
 ---
 
@@ -696,13 +695,16 @@ O acesso ao GCP (via **WIF, sem chave JSON**) só é necessário para: o `plan`/
 
 | Variable | Exemplo | Usado por | Finalidade |
 | --- | --- | --- | --- |
-| `GCP_PROJECT_ID` | `meu-projeto-gcp` | ambos | ID do projeto GCP |
+| `GCP_PROJECT_ID` | `meu-projeto-gcp` | ambos | ID do projeto GCP (autentica o WIF **e** define o `project_id` do Terraform via `TF_VAR_project_id`) |
+| `GCS_BUCKET` | `meu-bucket-ingestao` | `terraform.yml` | (Opcional) nome do bucket GCS de ingestão criado pelo Terraform via `TF_VAR_gcs_bucket_name` — padrão `bruno_dm` |
 | `GCP_WIF_PROVIDER` | `projects/123/locations/global/workloadIdentityPools/pool/providers/prov` | ambos | Provider do Workload Identity Federation |
 | `GCP_WIF_SERVICE_ACCOUNT` | `sa@meu-projeto.iam.gserviceaccount.com` | ambos | Service Account impersonada pelo WIF |
 | `TF_STATE_BUCKET` | `terraform-state-meu-projeto` | `terraform.yml` | Bucket GCS do state remoto do Terraform |
 | `TF_STATE_PREFIX` | `terraform/state` | `terraform.yml` | (Opcional) prefixo do state — padrão `terraform/state` |
 | `TERRAFORM_APPLY_ENABLED` | `true` | `terraform.yml` | Libera o `apply` automático em merge na `main` |
 | `DBT_INTEGRATION_ENABLED` | `true` | `ci.yml` | Ativa o job de integração dbt + BigQuery |
+
+> **Reproduzir em outro projeto GCP via Actions não exige mudar código.** O CI lê os defaults do [infra/variables.tf](infra/variables.tf), mas `GCP_PROJECT_ID` e `GCS_BUCKET` os sobrescrevem via `TF_VAR_*` no `terraform.yml`. Para apontar o `plan`/`apply` para o seu projeto e bucket, basta definir essas duas Variables — sem editar `variables.tf` nem commitar `terraform.tfvars`. Se você é o dono do projeto original, pode deixá-las em branco: o fallback usa `projeto-data-master` e `bruno_dm`.
 
 > **Como obter os valores de WIF?** Provisione o WIF (já declarado no `infra/`, opt-in via `github_actions_wif_enabled = true`) com um `terraform apply` local — os `outputs` retornam o `GCP_WIF_PROVIDER` e o `GCP_WIF_SERVICE_ACCOUNT` prontos para colar nas Variables. Passo a passo no [Bootstrap do CI/CD (WIF)](#bootstrap-do-cicd-workload-identity-federation).
 
