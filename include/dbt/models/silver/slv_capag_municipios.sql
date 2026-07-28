@@ -53,7 +53,15 @@ cleaned as (
         ) as indicador_3,
         upper(trim(nullif(nullif(cast(nota_3 as string), 'n.d.'), ''))) as nota_3,
 
-        upper(trim(nullif(cast(classificacao_capag as string), ''))) as classificacao_capag,
+        -- A partir do ano base 2023 a fonte passou a emitir a classificacao com sufixo
+        -- (A+, B+, ...), refletindo o ICF. O modelo de score trabalha com a letra base,
+        -- entao normalizamos aqui: qualquer letra de A a D seguida de sinal vira a propria
+        -- letra (A+ -> A, B+ -> B, e assim por diante). Valores sem letra base valida
+        -- (ex: 'n.e.', vazio) viram NULL e caem em INDETERMINADO, como antes.
+        regexp_extract(
+            upper(trim(cast(classificacao_capag as string))),
+            r'^([A-D])'
+        ) as classificacao_capag,
         upper(trim(nullif(nullif(cast(icf as string), 'n.d.'), ''))) as icf,
         cast(ano_base as int64) as ano_base,
         cast(ingested_at as timestamp) as ingested_at,

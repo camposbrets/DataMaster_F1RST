@@ -218,9 +218,10 @@ models:
               config:
                 severity: warn
       - name: faixa_populacao
+        description: "Porte do municipio. 'Nao informado' quando a fonte nao publica a populacao (a partir do ano base 2023)."
         tests:
           - accepted_values:
-              values: ['Pequeno (< 20k)', 'Medio (20k-100k)', 'Grande (100k-500k)', 'Metropole (> 500k)']
+              values: ['Pequeno (< 20k)', 'Medio (20k-100k)', 'Grande (100k-500k)', 'Muito grande (> 500k)', 'Nao informado']
               config:
                 severity: warn
 

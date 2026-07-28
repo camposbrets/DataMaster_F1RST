@@ -155,11 +155,15 @@ select
             then 'ELEVADO'
         else 'CRITICO'
     end as classificacao_risco,
+    -- Faixa populacional. A fonte parou de publicar a coluna Populacao a partir do ano
+    -- base 2023, entao o NULL e tratado explicitamente: sem o dado, o municipio fica em
+    -- 'Nao informado' em vez de ser absorvido pela ultima faixa por falta de ELSE.
     case
+        when populacao is null then 'Nao informado'
         when populacao < 20000 then 'Pequeno (< 20k)'
         when populacao < 100000 then 'Medio (20k-100k)'
         when populacao < 500000 then 'Grande (100k-500k)'
-        else 'Metropole (> 500k)'
+        when populacao >= 500000 then 'Muito grande (> 500k)'
     end as faixa_populacao
 from score_final
 {% if is_incremental() %}

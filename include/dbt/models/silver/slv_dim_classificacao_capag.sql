@@ -1,5 +1,7 @@
 {{ config(materialized='table') }}
 
+-- A silver ja normaliza sufixos (A+ -> A, B+ -> B), entao o filtro abaixo funciona como
+-- guarda defensiva contra valores inesperados da fonte, nao como descarte de classes reais.
 with classificacoes as (
     select distinct classificacao_capag
     from {{ ref('slv_capag_municipios') }}

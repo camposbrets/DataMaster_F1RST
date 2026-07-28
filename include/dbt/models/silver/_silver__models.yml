@@ -42,10 +42,10 @@ models:
       - name: indicador_3
         description: "Indice de Liquidez - acima de 1 eh adequado"
       - name: classificacao_capag
-        description: "Classificacao CAPAG: A, B, C ou D"
+        description: "Classificacao CAPAG normalizada para a letra base: A, B, C ou D (sufixos como A+ e B+ sao reduzidos a letra). NULL quando a fonte nao classifica o municipio."
         tests:
           - accepted_values:
-              values: ['A','B','C','D','E']
+              values: ['A','B','C','D']
               config:
                 severity: warn
       - name: ingested_at

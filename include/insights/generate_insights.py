@@ -305,7 +305,7 @@ def insight_capag_vs_pib(client, ano=None):
             f"A analise por faixa populacional revela padroes interessantes: "
             f"{'; '.join(narrativas)}. "
             f"Municipios menores tendem a ter maior vulnerabilidade fiscal, "
-            f"enquanto metropoles geralmente apresentam maior resiliencia economica."
+            f"enquanto os de maior porte geralmente apresentam maior resiliencia economica."
         ),
         'metrica_chave': f"{len(por_faixa)} faixas populacionais analisadas",
         'valor_metrica': float(len(por_faixa)),
