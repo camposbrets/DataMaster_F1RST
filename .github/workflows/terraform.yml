@@ -66,6 +66,10 @@ jobs:
       # WIF e opt-in (default false p/ reproducao simples); o CI gerencia o WIF explicitamente.
       TF_VAR_github_actions_wif_enabled: "true"
       TF_VAR_github_repository: ${{ github.repository }}
+      # Projeto/bucket parametrizados por Variables; fallback p/ os defaults do variables.tf
+      # (sem fallback, uma Variable vazia sobrescreveria o default com "").
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID || 'projeto-data-master' }}
+      TF_VAR_gcs_bucket_name: ${{ vars.GCS_BUCKET || 'bruno_dm' }}
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR }}
@@ -104,6 +108,10 @@ jobs:
       # WIF e opt-in (default false p/ reproducao simples); o CI gerencia o WIF explicitamente.
       TF_VAR_github_actions_wif_enabled: "true"
       TF_VAR_github_repository: ${{ github.repository }}
+      # Projeto/bucket parametrizados por Variables; fallback p/ os defaults do variables.tf
+      # (sem fallback, uma Variable vazia sobrescreveria o default com "").
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID || 'projeto-data-master' }}
+      TF_VAR_gcs_bucket_name: ${{ vars.GCS_BUCKET || 'bruno_dm' }}
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR }}

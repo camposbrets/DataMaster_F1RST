@@ -946,6 +946,10 @@ make infra-apply       # terraform apply (cria infra no GCP)
 make infra-destroy     # Destrói toda a infraestrutura GCP (CUIDADO!)
 make infra-fmt         # Formata os arquivos .tf com terraform fmt
 
+# Plano de dados apenas (bucket + datasets), preservando o bootstrap de CI/CD
+make infra-apply-data    # Recria apenas bucket GCS + datasets BigQuery
+make infra-destroy-data  # Destrói apenas bucket GCS + datasets BigQuery
+
 # Airflow e Metabase
 make airflow-start     # Inicia Airflow + Metabase via Docker
 make airflow-stop      # Para os containers (preserva dados)
@@ -959,6 +963,8 @@ make dbt-docs          # Gera e abre documentação do dbt
 # Reset completo (útil para reprodutibilidade)
 make reset             # Destrói, recria infra GCP e reinicia Airflow
 ```
+
+> **Por que existe um "plano de dados" separado?** Os alvos `infra-apply-data` / `infra-destroy-data` agem apenas sobre o bucket GCS e os datasets BigQuery — que é o que a reprodução do zero precisa recriar. O **bootstrap de CI/CD** (pool WIF, provider OIDC e a service account do GitHub Actions) fica de fora de propósito: é infraestrutura de esteira, criada uma vez no mesmo state remoto, e exige permissões de IAM que a service account do pipeline **não tem** — nela, até o *refresh* retorna `403`. Essa separação é o princípio do menor privilégio na prática: a identidade que roda o pipeline de dados não deve poder alterar a infraestrutura de identidade que a autentica.
 
 ### Comandos para parar/limpar o ambiente
 
@@ -1079,8 +1085,8 @@ A partir daqui, todo PR em `infra/` roda `plan` e todo merge na `main` roda `app
 | Tecnologia | Versão | Uso |
 | --- | --- | --- |
 | **Docker** | — | Containerização do ambiente |
-| **Astro CLI / Runtime** | 12.7.1 | Gerenciamento do Airflow |
-| **Apache Airflow** | 2.x (TaskFlow API) | Orquestração do pipeline |
+| **Astro CLI / Runtime** | 12.12.0 | Gerenciamento do Airflow |
+| **Apache Airflow** | 2.10.5 (TaskFlow API) | Orquestração do pipeline |
 | **astronomer-cosmos** | 1.8.0 | Integração Airflow ↔ dbt (DbtTaskGroup) |
 | **astro-sdk-python** | 1.8.1 | Operadores de carga GCS → BigQuery (aql.load_file) |
 | **Google Cloud Storage** | — | Armazenamento dos arquivos CSV (raw layer) + versionamento de objetos |
@@ -1139,7 +1145,7 @@ DataMaster_F1RST/
 ├── .github/workflows/
 │   ├── ci.yml                             # CI: dbt-validate + docker-build + python-lint + dbt-integration (opt-in)
 │   └── terraform.yml                      # CD: Terraform format/validate + plan (PR) + apply (merge, opt-in)
-├── Dockerfile                             # Astro Runtime 12.7.1 + dbt_venv (dbt-bigquery 1.8.3)
+├── Dockerfile                             # Astro Runtime 12.12.0 + dbt_venv (dbt-bigquery 1.8.3)
 ├── docker-compose.override.yml            # Metabase 0.50.24 (porta 3000, mem_limit 1g)
 ├── Makefile                               # Atalhos: make infra-plan, make airflow-start, make reset, etc.
 ├── requirements.txt                       # Dependências Python (cosmos 1.8.0, protobuf >=4.25, sidrapy)

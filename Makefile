@@ -5,7 +5,14 @@
 # Exemplo: make infra-plan
 # =============================================
 
-.PHONY: help setup infra-init infra-plan infra-apply infra-destroy airflow-start airflow-stop airflow-restart
+.PHONY: help setup infra-init infra-plan infra-apply infra-destroy infra-apply-data infra-destroy-data airflow-start airflow-stop airflow-restart
+
+# Windows: o make do Gow/MinGW aponta SHELL para um "sh.exe" inexistente, o que faz
+# todo $(shell ...) falhar silenciosamente (CreateProcess failed) e o .env nao ser lido.
+# Usar o ComSpec (cmd.exe) resolve. Em Linux/macOS nada muda.
+ifeq ($(OS),Windows_NT)
+SHELL := $(ComSpec)
+endif
 
 CREDENTIAL_FILE := $(CURDIR)/include/gcp/service_account.json
 
@@ -16,8 +23,8 @@ endif
 # Backend remoto (GCS): o bucket de state e lido do .env (chave TF_STATE_BUCKET) e
 # injetado via -backend-config no init — nunca fica hardcoded no codigo Terraform.
 ifneq (,$(wildcard ./.env))
-TF_STATE_BUCKET ?= $(shell grep -E '^TF_STATE_BUCKET=' .env | cut -d= -f2- | tr -d '\r')
-TF_STATE_PREFIX ?= $(shell grep -E '^TF_STATE_PREFIX=' .env | cut -d= -f2- | tr -d '\r')
+TF_STATE_BUCKET ?= $(shell grep -E "^TF_STATE_BUCKET=" .env | cut -d= -f2- | tr -d "\r")
+TF_STATE_PREFIX ?= $(shell grep -E "^TF_STATE_PREFIX=" .env | cut -d= -f2- | tr -d "\r")
 endif
 TF_STATE_PREFIX := $(or $(strip $(TF_STATE_PREFIX)),terraform/state)
 
@@ -72,6 +79,20 @@ infra-apply: ## Aplica as mudancas de infraestrutura no GCP
 infra-destroy: ## Destroi toda a infraestrutura no GCP (CUIDADO!)
 	@$(MAKE) infra-init
 	cd infra && terraform destroy -input=false -lock=false
+
+# Plano de dados: o que a reproducao do zero recria (bucket + datasets).
+# O bootstrap de CI/CD (WIF + service account do GitHub Actions) fica de fora: e infra de
+# esteira, criada pela terraform-ci no mesmo state remoto, e exige permissoes de IAM que a
+# service account do pipeline (datamaster-sa) nao tem — o refresh nela falha com 403.
+TF_DATA_TARGETS = -target=google_storage_bucket.data -target=google_bigquery_dataset.this
+
+infra-destroy-data: ## Destroi apenas o plano de dados (bucket + datasets), preservando o bootstrap de CI/CD
+	@$(MAKE) infra-init
+	cd infra && terraform destroy -input=false -lock=false $(TF_DATA_TARGETS)
+
+infra-apply-data: ## Recria apenas o plano de dados (bucket + datasets)
+	@$(MAKE) infra-init
+	cd infra && terraform apply -input=false -lock=false $(TF_DATA_TARGETS)
 
 infra-fmt: ## Formata os arquivos Terraform
 	cd infra && terraform fmt -recursive
